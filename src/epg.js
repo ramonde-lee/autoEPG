@@ -74,7 +74,10 @@ export async function collect(source, {
       try {
         const rows = await source.programmes(channel, date);
         if (!rows.length) empty.push({ channel: channel.id, date });
-        const parsed = normalize(rows, channel, date);
+        // The extra day is only a lookback for programmes crossing midnight.
+        // Malformed old rows that ended before our window cannot affect this EPG.
+        const relevant = date < first ? rows.filter(row => row.et > range.start) : rows;
+        const parsed = normalize(relevant, channel, date);
         if (parsed.length && !parsed.some(p => dateKey(p.start) === date)) {
           throw new Error('Response contains no programmes starting on the requested date');
         }

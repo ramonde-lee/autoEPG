@@ -66,6 +66,7 @@ test('fetches advertised dates with one boundary day and keeps cross-midnight pr
       requested.push(date);
       return date === today ? [row()] : [
         row('Outside', '2026-09-08T20:00:00+08:00', '2026-09-08T21:00:00+08:00'),
+        row('Zero duration outside', '2026-09-08T19:00:00+08:00', '2026-09-08T19:00:00+08:00'),
         row('Boundary', '2026-09-08T23:30:00+08:00', '2026-09-09T00:15:00+08:00'),
       ];
     },
