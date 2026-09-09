@@ -17,14 +17,14 @@ export class GitHub {
     this.repository = repository;
     this.token = token;
   }
-  async call(method, path, body, { allow404 = false, upload = false } = {}) {
+  async call(method, path, body, { allow404 = false, upload = false, contentType = 'application/octet-stream' } = {}) {
     const host = upload ? 'https://uploads.github.com' : 'https://api.github.com';
     const response = await fetch(`${host}/repos/${this.repository}${path}`, {
       method, signal: AbortSignal.timeout(60_000),
       headers: {
         Authorization: `Bearer ${this.token}`, Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2026-03-10', 'User-Agent': 'autoEPG',
-        'Content-Type': upload ? 'application/octet-stream' : 'application/json',
+        'Content-Type': upload ? contentType : 'application/json',
       },
       body: body === undefined ? undefined : upload ? body : JSON.stringify(body),
     });
@@ -48,7 +48,8 @@ export async function upsertRelease(api, { date, today, commit, body, files }) {
     const bytes = files[name];
     if (!Buffer.isBuffer(bytes)) throw new Error(`Missing asset ${name}`);
     const pendingName = `__autoepg_${nonce}_${name}`;
-    const asset = await api.call('POST', `/releases/${release.id}/assets?name=${encodeURIComponent(pendingName)}`, bytes, { upload: true });
+    const contentType = name.endsWith('.xml') ? 'application/xml' : name.endsWith('.json') ? 'application/json' : 'text/plain';
+    const asset = await api.call('POST', `/releases/${release.id}/assets?name=${encodeURIComponent(pendingName)}`, bytes, { upload: true, contentType });
     const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
     if (asset.size !== bytes.length || (asset.digest && asset.digest !== digest)) throw new Error(`Upload verification failed: ${name}`);
     staged.push({ name, asset, pendingName, old: release.assets?.find(a => a.name === name) });

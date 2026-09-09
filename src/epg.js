@@ -133,7 +133,7 @@ export function renderXml(channels, programmes) {
   for (const p of programmes) {
     if (!ids.has(p.channel)) throw new Error(`Unknown channel ${p.channel}`);
     tv.ele('programme', { start: xmltvTime(p.start), stop: xmltvTime(p.stop), channel: p.channel })
-      .ele('title', { lang: 'zh' }).txt(cleanText(p.title));
+      .ele('title', /\p{Script=Han}/u.test(p.title) ? { lang: 'zh' } : {}).txt(cleanText(p.title));
   }
   return doc.end({ prettyPrint: true }) + '\n';
 }

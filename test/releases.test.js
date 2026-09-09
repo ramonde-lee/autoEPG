@@ -14,7 +14,7 @@ class FakeGitHub {
   latest = null;
   published = [];
   uploadCount = 0;
-  async call(method, path, body) {
+  async call(method, path, body, config) {
     if (method === 'GET' && path.startsWith('/releases/tags/')) {
       return structuredClone(this.releases.find(r => r.tag_name === path.split('/').at(-1)) ?? null);
     }
@@ -25,6 +25,8 @@ class FakeGitHub {
     }
     const upload = path.match(/^\/releases\/(\d+)\/assets\?name=(.*)$/);
     if (method === 'POST' && upload) {
+      assert.equal(config.contentType, decodeURIComponent(upload[2]).endsWith('.xml') ? 'application/xml' :
+        decodeURIComponent(upload[2]).endsWith('.json') ? 'application/json' : 'text/plain');
       if (++this.uploadCount === this.failUploadAt) throw new Error('upload failed');
       const release = this.releases.find(r => r.id === Number(upload[1]));
       const asset = { id: this.nextId++, name: decodeURIComponent(upload[2]), size: body.length,

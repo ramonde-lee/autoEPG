@@ -15,7 +15,7 @@
 | `channel/url` | 央视频对应频道页面，不是直播流 |
 | `programme/@channel` | 引用已声明的 `channel/@id` |
 | `programme/@start`、`@stop` | `YYYYMMDDhhmmss +0800`，包括秒及显式时区；结束时间为开区间 |
-| `programme/title` | 保留源站标题，正确转义 XML 特殊字符；`lang="zh"` 表示源站提供的中文元数据 |
+| `programme/title` | 保留源站标题并正确转义；包含汉字时标记 `lang="zh"`，其他标题省略无法确认的语言标记 |
 
 示意（台标地址为占位示例）：
 
