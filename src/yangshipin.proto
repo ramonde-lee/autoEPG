@@ -1,0 +1,49 @@
+syntax = "proto3";
+package yangshipin;
+
+// Relevant fields from the public TV site's protobuf schema (2026-09-09).
+// Unknown fields are intentionally skipped by protobufjs.
+message NavigationResponse {
+  uint32 code = 1;
+  Navigation data = 2;
+  string message = 3;
+}
+message Navigation { repeated Tab tabList = 2; }
+message Tab {
+  string name = 1;
+  string feedId = 4;
+  uint32 channelTag = 10;
+}
+message PageResponse {
+  uint32 code = 1;
+  Page data = 2;
+  string message = 3;
+}
+message Page { repeated Module feedModuleList = 2; }
+message Module {
+  string moduleType = 2;
+  repeated Channel dataTvChannelList = 15;
+}
+message Channel {
+  string channelName = 2;
+  string channelCode = 3;
+  string pid = 4;
+  string tvLogo = 5;
+  repeated string programDates = 10;
+  string channelType = 11;
+}
+message ProgrammeResponse {
+  uint32 code = 1;
+  repeated Programme dataList = 2;
+  string message = 3;
+  uint64 updateTime = 4;
+}
+message Programme {
+  string programId = 1;
+  string name = 2;
+  uint64 st = 3;
+  uint64 et = 4;
+  string startTime = 5;
+  string endTime = 6;
+  uint32 duration = 7;
+}

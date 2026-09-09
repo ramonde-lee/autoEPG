@@ -1,0 +1,75 @@
+name: Update EPG
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # UTC -> Beijing 00:23, 06:23, 12:23, 18:23. Avoid the busy top of the hour.
+    - cron: '23 4,10,16,22 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  publish:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    concurrency:
+      group: epg-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - run: npm ci --omit=dev
+      - name: Fetch and validate schedules
+        run: npm run generate
+      - name: Verify files and prepare release notes
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS
+          node --input-type=module <<'NODE' > release-notes.md
+          import { readFileSync } from 'node:fs';
+          const m = JSON.parse(readFileSync('manifest.json', 'utf8'));
+          console.log(`央视频节目单 · ${m.generatedAt}`);
+          console.log(`\n频道：${m.channelCount}；节目：${m.programmeCount}；今日频道覆盖率：${(m.todayChannelCoverage * 100).toFixed(1)}%。`);
+          console.log(`\n日期范围（北京时间）：${m.requestedDates.from} 至 ${m.requestedDates.to}，以源站实际提供的数据为准。`);
+          console.log(`\n空节目单：${m.emptySchedules.length} 份。详情见 manifest.json。`);
+          const base = `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/latest/download`;
+          console.log(`\n固定订阅：[XML](${base}/epg.xml) · [Gzip](${base}/epg.xml.gz) · [频道映射](${base}/channels.json)`);
+          NODE
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload complete draft, then publish as latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="epg-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          title="EPG $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')"
+          gh release create "$tag" --draft --target "$GITHUB_SHA" \
+            --title "$title" --notes-file dist/release-notes.md \
+            dist/epg.xml dist/epg.xml.gz dist/channels.json dist/manifest.json dist/SHA256SUMS
+          gh release edit "$tag" --draft=false --latest

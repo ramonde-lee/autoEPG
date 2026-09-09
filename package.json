@@ -1,0 +1,22 @@
+{
+  "name": "autoepg",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generate XMLTV from Yangshipin TV schedules and publish through GitHub Releases",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "generate": "node src/cli.js",
+    "test": "node --test",
+    "check": "node --check src/cli.js && node --check src/epg.js && node --check src/source.js"
+  },
+  "dependencies": {
+    "protobufjs": "8.8.0",
+    "xmlbuilder2": "4.0.3"
+  },
+  "devDependencies": {
+    "fast-xml-parser": "5.11.1"
+  }
+}
