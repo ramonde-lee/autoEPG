@@ -4,6 +4,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { dateKey, windowFor } from './epg.js';
 
 export const ASSETS = ['epg.xml', 'channels.json', 'manifest.json', 'SHA256SUMS'];
+const OPTIONAL_ASSETS = ['epg2.xml', 'epg3.xml'];
+
+function assetNames(names) {
+  if (!Array.isArray(names) || new Set(names).size !== names.length ||
+      ASSETS.some(name => !names.includes(name)) || names.some(name => ![...ASSETS, ...OPTIONAL_ASSETS].includes(name))) {
+    throw new Error('Invalid release asset list');
+  }
+  return names;
+}
 
 export function releasePolicy(date, today) {
   windowFor(date, 0, 0);
@@ -44,7 +53,7 @@ export async function upsertRelease(api, { date, today, commit, body, files }) {
   // Stage every new file before changing public names. Failed uploads leave old files intact.
   const nonce = randomUUID();
   const staged = [];
-  for (const name of ASSETS) {
+  for (const name of assetNames(Object.keys(files))) {
     const bytes = files[name];
     if (!Buffer.isBuffer(bytes)) throw new Error(`Missing asset ${name}`);
     const pendingName = `__autoepg_${nonce}_${name}`;
@@ -93,17 +102,19 @@ export async function publishDirectory(api, directory, commit, {
   const prepared = [];
   for (const entry of index.releases) {
     windowFor(entry.date, 0, 0);
-    const files = Object.fromEntries(await Promise.all(ASSETS.map(async name =>
+    const names = assetNames(entry.assets ?? ASSETS);
+    const files = Object.fromEntries(await Promise.all(names.map(async name =>
       [name, await readFile(join(directory, entry.date, name))])));
-    const expected = ASSETS.filter(name => name !== 'SHA256SUMS').map(name =>
+    const expected = names.filter(name => name !== 'SHA256SUMS').map(name =>
       `${createHash('sha256').update(files[name]).digest('hex')}  ${name}\n`).join('');
     if (files.SHA256SUMS.toString() !== expected) throw new Error(`Checksum mismatch: ${entry.date}`);
     const m = JSON.parse(files['manifest.json']);
     if (m.date !== entry.date) throw new Error(`Manifest date mismatch: ${entry.date}`);
     const base = `https://github.com/${api.repository}/releases`;
+    const variants = (m.variants ?? []).map(v => `[${v.file}](${base}/download/${entry.date}/${v.file})：${v.from} 至 ${v.to}（${v.bytes} 字节）`).join('\n\n');
     const body = `央视频节目单 · ${entry.date}（北京时间）\n\n` +
       `更新：${index.generatedAt}；频道：${m.channelCount}；节目：${m.programmeCount}；XML：${m.xmlBytes} 字节。\n\n` +
-      `本版本仅包含与这一天相交的节目，跨午夜节目保留真实起止时间。每日北京时间 00:00 刷新相同日期版本。\n\n` +
+      `epg.xml 为当日数据；如含 epg2.xml、epg3.xml，则分别从版本日期起覆盖两天、三天。跨午夜节目保留真实起止时间。每日北京时间 00:00 刷新相同日期版本。\n\n${variants}\n\n` +
       `[本日 XML](${base}/download/${entry.date}/epg.xml) · [当天固定订阅](${base}/latest/download/epg.xml)`;
     prepared.push({ date: entry.date, today, commit, files, body });
   }

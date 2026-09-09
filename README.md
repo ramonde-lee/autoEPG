@@ -8,6 +8,16 @@
 
 此固定地址只提供当天节目单，文件是未压缩的 UTF-8 XML，没有 `.gz`。播放器需要支持 HTTPS 重定向。
 
+当天 Latest 同时提供三个固定入口，按需要选择：
+
+| 文件 | 日期范围 | 订阅链接 |
+| --- | --- | --- |
+| `epg.xml` | 今天 | [单日](https://github.com/TvWasm/autoEPG/releases/latest/download/epg.xml) |
+| `epg2.xml` | 今天、明天 | [两日](https://github.com/TvWasm/autoEPG/releases/latest/download/epg2.xml) |
+| `epg3.xml` | 今天、明天、后天 | [三日](https://github.com/TvWasm/autoEPG/releases/latest/download/epg3.xml) |
+
+三份文件都是独立、未压缩的标准 XMLTV，每日一起刷新。未来日期尚未公布的节目不会凭空补齐，实际范围和节目数见 `manifest.json` 的 `variants`。
+
 ## 日期版本
 
 版本号和 tag 均为 `YYYY-MM-DD`，每个版本内的文件都叫 `epg.xml`。例如北京时间 2026-09-09：
@@ -77,7 +87,7 @@ npm test
 npm run generate
 ```
 
-输出为 `dist/YYYY-MM-DD/epg.xml` 和对应元数据，`dist/releases.json` 列出本轮可发布的日期及每份 XML 的大小。不输出合并多天的大 XML，也不输出 Gzip。
+输出为 `dist/YYYY-MM-DD/epg.xml` 和对应元数据；当天目录另有 `epg2.xml`、`epg3.xml`。`dist/releases.json` 列出本轮可发布的日期、附件及单日 XML 大小，不输出 Gzip。显式缩短本地日期范围时，只生成该范围可以覆盖的订阅文件。
 
 ```sh
 npm run generate -- --past-days 1 --future-days 3 --concurrency 2 --output dist

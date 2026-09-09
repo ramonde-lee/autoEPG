@@ -156,11 +156,22 @@ export async function writeArtifacts(directory, dataset) {
       emptySchedules: dataset.manifest.emptySchedules.filter(s => s.date === date),
       xmlBytes: xml.length,
     };
-    const files = {
-      'epg.xml': xml,
-      'channels.json': Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n'),
-      'manifest.json': Buffer.from(JSON.stringify(manifest, null, 2) + '\n'),
-    };
+    const files = { 'epg.xml': xml };
+    manifest.variants = [{ file: 'epg.xml', days: 1, from: date, to: date, programmeCount: programmes.length, bytes: xml.length }];
+    if (date === dataset.manifest.referenceDate) {
+      for (const days of [2, 3]) {
+        const end = day + days * DAY;
+        // A short, explicitly requested local window must not masquerade as 2/3 days.
+        if (end > stop) continue;
+        const combined = dataset.programmes.filter(p => p.start < end && p.stop > day);
+        const name = `epg${days}.xml`;
+        files[name] = Buffer.from(renderXml(dataset.channels, combined));
+        manifest.variants.push({ file: name, days, from: date, to: dateKey(end - 1),
+          programmeCount: combined.length, bytes: files[name].length });
+      }
+    }
+    files['channels.json'] = Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n');
+    files['manifest.json'] = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
     files['SHA256SUMS'] = Buffer.from(Object.entries(files).map(([name, data]) =>
       `${createHash('sha256').update(data).digest('hex')}  ${name}\n`).join(''));
     const folder = join(directory, date);
@@ -170,7 +181,7 @@ export async function writeArtifacts(directory, dataset) {
       await writeFile(`${target}.tmp`, data);
       await rename(`${target}.tmp`, target);
     }
-    releases.push({ date, programmeCount: programmes.length, xmlBytes: xml.length });
+    releases.push({ date, programmeCount: programmes.length, xmlBytes: xml.length, assets: Object.keys(files) });
   }
   await mkdir(directory, { recursive: true });
   const index = { ...dataset.manifest, releases };

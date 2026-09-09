@@ -136,3 +136,28 @@ test('writes one plain XML per date, keeps boundary programmes and verifies chec
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('today exports one/two/three-day XML variants with precise ranges and no duplicate programmes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'autoepg-variants-test-'));
+  try {
+    const dates = [today, '2026-09-10', '2026-09-11', '2026-09-12'];
+    const data = await collect({
+      channels: async () => [{ ...channel, dates }],
+      programmes: async (c, date) => [row(date, `${date}T23:00:00+08:00`, `${date}T23:30:00+08:00`)],
+    }, { ...options, futureDays: 3 });
+    const index = await writeArtifacts(directory, data);
+    const parser = new XMLParser({ ignoreAttributes: false, isArray: name => name === 'programme' });
+    for (const days of [1, 2, 3]) {
+      const name = days === 1 ? 'epg.xml' : `epg${days}.xml`;
+      const xml = await readFile(join(directory, today, name), 'utf8');
+      assert.equal(XMLValidator.validate(xml), true);
+      const programmes = parser.parse(xml).tv.programme;
+      assert.equal(programmes.length, days);
+      assert.deepEqual(programmes.map(p => typeof p.title === 'string' ? p.title : p.title['#text']), dates.slice(0, days));
+    }
+    assert(index.releases[0].assets.includes('epg3.xml'));
+    assert(!index.releases[1].assets.includes('epg3.xml'));
+    const manifest = JSON.parse(await readFile(join(directory, today, 'manifest.json')));
+    assert.deepEqual(manifest.variants.map(v => v.to), dates.slice(0, 3));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

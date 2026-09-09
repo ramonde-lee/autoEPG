@@ -121,6 +121,17 @@ test('rejects immutable releases before replacing files', async () => {
   assert.equal(api.uploadCount, 4);
 });
 
+test('publishes and replaces the two-day and three-day subscription assets', async () => {
+  const api = new FakeGitHub();
+  const variants = { ...files('v1'), 'epg2.xml': Buffer.from('two days'), 'epg3.xml': Buffer.from('three days') };
+  await upsertRelease(api, { ...options, files: variants });
+  assert(api.releases[0].assets.some(a => a.name === 'epg2.xml'));
+  assert(api.releases[0].assets.some(a => a.name === 'epg3.xml'));
+  await upsertRelease(api, { ...options, files: { ...variants, 'epg3.xml': Buffer.from('updated three days') } });
+  assert.equal(api.releases[0].assets.length, 6);
+  assert.equal(api.releases[0].assets.find(a => a.name === 'epg3.xml').size, 18);
+});
+
 test('publishes date directories with checksums, sets today first and refuses stale/corrupt input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'autoepg-release-test-'));
   try {

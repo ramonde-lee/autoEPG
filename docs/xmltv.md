@@ -4,6 +4,8 @@
 它是未压缩的 UTF-8 XML，仅包含与当天相交的节目。日期以北京时间为准。
 未来数据使用日期版本的 `epg.xml`，例如 `/releases/download/2026-09-10/epg.xml`。
 
+当天 Latest 另提供 `epg2.xml`（今天和明天）及 `epg3.xml`（今天、明天和后天），路径分别为 `/releases/latest/download/epg2.xml` 和 `/releases/latest/download/epg3.xml`。它们与单日文件使用相同频道 ID、PNG 台标和时间格式；合并后的每个节目只输出一次。
+
 ## 标准字段
 
 | XMLTV 字段 | 约定 |
