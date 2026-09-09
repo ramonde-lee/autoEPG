@@ -10,7 +10,7 @@
   "scripts": {
     "generate": "node src/cli.js",
     "test": "node --test",
-    "check": "node --check src/cli.js && node --check src/epg.js && node --check src/source.js"
+    "check": "node --check src/cli.js && node --check src/epg.js && node --check src/source.js && node --check src/releases.js && node --check src/publish.js"
   },
   "dependencies": {
     "protobufjs": "8.8.0",

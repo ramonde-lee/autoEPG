@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { collect, dateKey, windowFor, xmltvTime, normalize, deduplicate, renderXml, writeArtifacts } from '../src/epg.js';
@@ -116,20 +115,23 @@ test('limits concurrent requests', async () => {
   assert.equal(peak, 2);
 });
 
-test('writes parseable XML, matching gzip, metadata and verified checksums', async () => {
+test('writes one plain XML per date, keeps boundary programmes and verifies checksums', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'autoepg-test-'));
   try {
-    const data = await collect(source(), options);
-    await writeArtifacts(directory, data);
-    const xml = await readFile(join(directory, 'epg.xml'));
+    const data = await collect(source(), { ...options, futureDays: 1 });
+    const index = await writeArtifacts(directory, data);
+    assert.deepEqual(index.releases.map(r => r.date), [today, '2026-09-10']);
+    const folder = join(directory, today);
+    const xml = await readFile(join(folder, 'epg.xml'));
     assert.equal(XMLValidator.validate(xml.toString()), true);
-    assert.deepEqual(gunzipSync(await readFile(join(directory, 'epg.xml.gz'))), xml);
-    const sums = (await readFile(join(directory, 'SHA256SUMS'), 'utf8')).trim().split('\n');
+    assert(!(await readdir(folder)).some(name => name.endsWith('.gz')));
+    assert.equal(new XMLParser().parse(await readFile(join(directory, '2026-09-10', 'epg.xml'), 'utf8')).tv.programme.title, '新闻 & <天气>');
+    const sums = (await readFile(join(folder, 'SHA256SUMS'), 'utf8')).trim().split('\n');
     for (const line of sums) {
       const [digest, name] = line.split('  ');
-      assert.equal(createHash('sha256').update(await readFile(join(directory, name))).digest('hex'), digest);
+      assert.equal(createHash('sha256').update(await readFile(join(folder, name))).digest('hex'), digest);
     }
-    assert.equal(JSON.parse(await readFile(join(directory, 'manifest.json'))).channelCount, 1);
+    assert.equal(JSON.parse(await readFile(join(folder, 'manifest.json'))).date, today);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

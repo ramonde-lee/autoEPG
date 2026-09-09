@@ -32,8 +32,8 @@ try {
       minTodayCoverage,
       onProgress: (done, total) => { if (done % 50 === 0 || done === total) console.log(`Schedules ${done}/${total}`); },
     });
-    await writeArtifacts(values.output, dataset);
-    console.log(JSON.stringify(dataset.manifest, null, 2));
+    const index = await writeArtifacts(values.output, dataset);
+    console.log(JSON.stringify(index, null, 2));
   }
 } catch (error) {
   console.error(error.message);

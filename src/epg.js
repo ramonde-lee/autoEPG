@@ -2,7 +2,6 @@ import { create } from 'xmlbuilder2';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { mkdir, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { HOME } from './source.js';
 
@@ -101,7 +100,7 @@ export async function collect(source, {
   const counts = new Map();
   for (const p of result) counts.set(p.channel, (counts.get(p.channel) ?? 0) + 1);
   const manifest = {
-    generatedAt: new Date().toISOString(), source: HOME, timezone: 'Asia/Shanghai',
+    generatedAt: new Date().toISOString(), referenceDate: today, source: HOME, timezone: 'Asia/Shanghai',
     requestedDates: { from: first, to: last },
     channelCount: channels.length, programmeCount: result.length,
     channelsWithProgrammes: counts.size, todayChannelCoverage: coverage,
@@ -139,19 +138,42 @@ export function renderXml(channels, programmes) {
 }
 
 export async function writeArtifacts(directory, dataset) {
-  const xml = Buffer.from(renderXml(dataset.channels, dataset.programmes));
-  const files = {
-    'epg.xml': xml,
-    'epg.xml.gz': gzipSync(xml, { level: 9 }),
-    'channels.json': Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n'),
-    'manifest.json': Buffer.from(JSON.stringify(dataset.manifest, null, 2) + '\n'),
-  };
-  files['SHA256SUMS'] = Buffer.from(Object.entries(files).map(([name, data]) =>
-    `${createHash('sha256').update(data).digest('hex')}  ${name}\n`).join(''));
-  await mkdir(directory, { recursive: true });
-  for (const [name, data] of Object.entries(files)) {
-    const target = join(directory, name);
-    await writeFile(`${target}.tmp`, data);
-    await rename(`${target}.tmp`, target);
+  const releases = [];
+  const { from, to } = dataset.manifest.requestedDates;
+  const start = windowFor(from, 0, 0).start;
+  const stop = windowFor(to, 0, 0).stop;
+  for (let day = start; day < stop; day += DAY) {
+    const date = dateKey(day);
+    const programmes = dataset.programmes.filter(p => p.start < day + DAY && p.stop > day);
+    if (!programmes.length) continue;
+    const xml = Buffer.from(renderXml(dataset.channels, programmes));
+    const manifest = {
+      ...dataset.manifest, date, requestedDates: { from: date, to: date }, programmeCount: programmes.length,
+      channelsWithProgrammes: new Set(programmes.map(p => p.channel)).size,
+      earliestStart: new Date(programmes.reduce((min, p) => Math.min(min, p.start), Infinity) * 1000).toISOString(),
+      latestStop: new Date(programmes.reduce((max, p) => Math.max(max, p.stop), -Infinity) * 1000).toISOString(),
+      emptySchedules: dataset.manifest.emptySchedules.filter(s => s.date === date),
+      xmlBytes: xml.length,
+    };
+    const files = {
+      'epg.xml': xml,
+      'channels.json': Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n'),
+      'manifest.json': Buffer.from(JSON.stringify(manifest, null, 2) + '\n'),
+    };
+    files['SHA256SUMS'] = Buffer.from(Object.entries(files).map(([name, data]) =>
+      `${createHash('sha256').update(data).digest('hex')}  ${name}\n`).join(''));
+    const folder = join(directory, date);
+    await mkdir(folder, { recursive: true });
+    for (const [name, data] of Object.entries(files)) {
+      const target = join(folder, name);
+      await writeFile(`${target}.tmp`, data);
+      await rename(`${target}.tmp`, target);
+    }
+    releases.push({ date, programmeCount: programmes.length, xmlBytes: xml.length });
   }
+  await mkdir(directory, { recursive: true });
+  const index = { ...dataset.manifest, releases };
+  await writeFile(join(directory, 'releases.json.tmp'), JSON.stringify(index, null, 2) + '\n');
+  await rename(join(directory, 'releases.json.tmp'), join(directory, 'releases.json'));
+  return index;
 }
