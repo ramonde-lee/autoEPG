@@ -100,7 +100,8 @@ export async function collect(source, {
   const counts = new Map();
   for (const p of result) counts.set(p.channel, (counts.get(p.channel) ?? 0) + 1);
   const manifest = {
-    generatedAt: new Date().toISOString(), referenceDate: today, source: HOME, timezone: 'Asia/Shanghai',
+    generatedAt: new Date().toISOString(), referenceDate: today, source: HOME,
+    format: 'XMLTV', encoding: 'UTF-8', timezone: 'Asia/Shanghai', logoFormat: 'PNG',
     requestedDates: { from: first, to: last },
     channelCount: channels.length, programmeCount: result.length,
     channelsWithProgrammes: counts.size, todayChannelCoverage: coverage,
@@ -123,9 +124,9 @@ export function renderXml(channels, programmes) {
     if (ids.has(c.id)) throw new Error(`Duplicate channel ${c.id}`);
     ids.add(c.id);
     const channel = tv.ele('channel', { id: c.id });
-    channel.ele('display-name', { lang: 'zh' }).txt(cleanText(c.name));
-    // Common IPTV spelling; PID remains the stable identity.
-    if (/^CCTV\d+\+?$/.test(c.name)) channel.ele('display-name').txt(c.name.replace('CCTV', 'CCTV-'));
+    for (const name of new Set([c.name, ...(c.aliases ?? [])])) {
+      channel.ele('display-name', { lang: 'zh' }).txt(cleanText(name));
+    }
     if (/^https?:\/\//.test(c.logo)) channel.ele('icon', { src: c.logo });
     channel.ele('url').txt(`${HOME}?pid=${c.pid}`);
   }

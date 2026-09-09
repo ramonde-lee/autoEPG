@@ -6,6 +6,56 @@ export const HOME = 'https://www.yangshipin.cn/tv/home';
 const API = 'https://capi.yangshipin.cn/api/';
 const schema = await protobuf.load(fileURLToPath(new URL('./yangshipin.proto', import.meta.url)));
 
+export function pngLogo(value) {
+  if (!value) return '';
+  const url = new URL(value);
+  if (!['https:', 'http:'].includes(url.protocol) || !/\.png$/i.test(url.pathname)) {
+    throw new Error(`Expected a PNG channel logo: ${value}`);
+  }
+  // Yangshipin's .png paths normally carry a CDN directive that returns WebP.
+  if (url.hostname === 'resources.yangshipin.cn' && url.search === '?imageMogr2/format/webp') url.search = '';
+  url.hash = '';
+  return url.href;
+}
+
+export function channelAliases(name) {
+  const aliases = new Set([name, name.normalize('NFKC')]);
+  const cctv = name.match(/^CCTV(\d+)(\+?)$/);
+  if (cctv) aliases.add(`CCTV-${cctv[1]}${cctv[2]}`);
+  if (name === 'CCTV16-HD') { aliases.add('CCTV16'); aliases.add('CCTV-16'); }
+  if (name.normalize('NFKC') === 'CCTV16(4K)') { aliases.add('CCTV16-4K'); aliases.add('CCTV-16-4K'); }
+  if (name === '福建东南卫视') aliases.add('东南卫视');
+  if (name === '中国教育电视台1频道') { aliases.add('CETV1'); aliases.add('CETV-1'); }
+  return [...aliases];
+}
+
+export async function verifyPngLogos(channels, { fetchImpl = fetch, delay = sleep } = {}) {
+  const urls = [...new Set(channels.map(c => c.logo).filter(Boolean))];
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, urls.length) }, async () => {
+    while (next < urls.length) {
+      const url = urls[next++];
+      for (let attempt = 0; ; attempt++) {
+        try {
+          // No Referer or login headers: these links must work in IPTV clients too.
+          const response = await fetchImpl(url, {
+            signal: AbortSignal.timeout(20_000), headers: { Accept: 'image/png', Range: 'bytes=0-7' },
+          });
+          if (!response.ok) { await response.body?.cancel(); throw new Error(`HTTP ${response.status}`); }
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+          if (!signature.every((value, i) => bytes[i] === value)) throw new Error('Response is not PNG');
+          break;
+        } catch (error) {
+          if (attempt === 2) throw new Error(`PNG logo check failed for ${url}: ${error.message}`);
+          await delay(1000 * 2 ** attempt);
+        }
+      }
+    }
+  }));
+  return urls.length;
+}
+
 export function decode(type, bytes) {
   const message = schema.lookupType(`yangshipin.${type}`);
   const data = message.toObject(message.decode(bytes), { longs: Number, arrays: true });
@@ -49,7 +99,7 @@ export function extractChannels(page) {
       }
       const channel = {
         id: `ysp.${c.pid}`, pid: c.pid, name: c.channelName.trim(),
-        logo: c.tvLogo ?? '', group: c.channelType ?? '', dates,
+        logo: pngLogo(c.tvLogo), aliases: channelAliases(c.channelName.trim()), group: c.channelType ?? '', dates,
       };
       const previous = channels.get(c.pid);
       if (previous && previous.name !== channel.name) throw new Error(`Conflicting channel ${c.pid}`);
@@ -68,7 +118,9 @@ export class Yangshipin {
     const tab = nav.data?.tabList?.find(t => t.channelTag === 2);
     if (!tab?.feedId) throw new Error('TV navigation missing; upstream schema may have changed');
     const page = await request(`${API}oms/pc/page/${encodeURIComponent(tab.feedId)}`, 'PageResponse', this.options);
-    return extractChannels(page);
+    const channels = extractChannels(page);
+    await verifyPngLogos(channels, this.options);
+    return channels;
   }
   async programmes(channel, date) {
     const response = await request(`${API}yspepg/program/${channel.pid}/${date.replaceAll('-', '')}`,

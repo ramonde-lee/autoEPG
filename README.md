@@ -45,7 +45,7 @@ https://github.com/TvWasm/autoEPG/releases/download/2026-09-09/epg.xml
 
 ## 播放器频道匹配
 
-频道 ID 使用稳定的 `ysp.<央视频PID>`。例如 CCTV1 为 `ysp.600001859`，名称保持网站原名，常见 CCTV 频道还包含 `CCTV-1` 等显示别名。支持按名称匹配的播放器可直接匹配；否则根据 `channels.json` 设置 M3U 的 `tvg-id`：
+频道 ID 使用稳定的 `ysp.<央视频PID>`，`channel/@id` 与 `programme/@channel` 完全一致。例如 CCTV1 为 `ysp.600001859`，名称保持网站原名，常见 CCTV 频道还包含 `CCTV-1` 等显示别名。`channels.json` 同步提供 `aliases`，便于应用映射。支持按名称匹配的播放器可直接匹配；否则设置 M3U 的 `tvg-id`：
 
 ```m3u
 #EXTM3U
@@ -54,6 +54,8 @@ https://your-stream-provider.example/cctv1.m3u8
 ```
 
 播放地址为占位示例，本项目只提供节目单。
+
+台标链接统一为真正的 PNG：移除源站将 PNG 转为 WebP 的 CDN 参数，并在每次抓取时通过无登录、无 Referer 的请求验证 PNG 文件签名。图片不内嵌到 XML，避免增加体积。XMLTV 字段、频道关联和跨日语义见 [接入说明](docs/xmltv.md)。
 
 ## 免费额度
 
