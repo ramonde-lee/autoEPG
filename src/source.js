@@ -2,6 +2,7 @@ import protobuf from 'protobufjs';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { channelProfile, groupedChannels } from './channels.js';
+import { projectLogo, projectLogoBytes } from './logos.js';
 
 export const HOME = 'https://www.yangshipin.cn/tv/home';
 const API = 'https://capi.yangshipin.cn/api/';
@@ -36,6 +37,14 @@ export async function verifyPngLogos(channels, { fetchImpl = fetch, delay = slee
   await Promise.all(Array.from({ length: Math.min(4, urls.length) }, async () => {
     while (next < urls.length) {
       const url = urls[next++];
+      // Versioned repository assets are checked locally, including before the first push.
+      const local = projectLogoBytes(url);
+      if (local) {
+        if (!local.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+          throw new Error(`Project logo is not PNG: ${url}`);
+        }
+        continue;
+      }
       for (let attempt = 0; ; attempt++) {
         try {
           // No Referer or login headers: these links must work in IPTV clients too.
@@ -98,9 +107,10 @@ export function extractChannels(page) {
         Number.isNaN(Date.parse(d)) || new Date(d).toISOString().slice(0, 10) !== d)) {
         throw new Error(`Invalid programme date for ${c.pid}`);
       }
+      const profile = channelProfile(c.pid, c.channelName.trim(), c.channelType);
       const channel = {
-        ...channelProfile(c.pid, c.channelName.trim(), c.channelType), pid: c.pid,
-        logo: pngLogo(c.tvLogo), dates,
+        ...profile, pid: c.pid,
+        logo: projectLogo(profile.id) ?? pngLogo(c.tvLogo), dates,
       };
       channel.aliases = [...new Set([...channel.aliases, ...channelAliases(c.channelName.trim())])];
       const previous = channels.get(c.pid);

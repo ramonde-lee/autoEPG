@@ -84,7 +84,7 @@ https://your-stream-provider.example/cctv1.m3u8
 
 分组跟随央视频源站分类（包括源站归入卫视频道的 CETV1）。日期版本也提供两个单日分组文件。分组和完整文件使用相同的频道 ID、别名及 PNG 台标。
 
-台标链接统一为真正的 PNG：移除源站将 PNG 转为 WebP 的 CDN 参数，并在每次抓取时通过无登录、无 Referer 的请求验证 PNG 文件签名。图片不内嵌到 XML，避免增加体积。XMLTV 字段、频道关联和跨日语义见 [接入说明](docs/xmltv.md)。
+台标链接统一为真正的 PNG。CCTV 的 34 个频道使用项目内 [assets/logos](assets/logos/README.md) 的银白渐变透明台标，通过本仓库 Raw 地址提供；每次生成校验本地文件签名和 SHA-256。CGTN、卫视频道继续使用源站 PNG，移除 WebP 转换参数，并通过无登录、无 Referer 的请求验证 PNG 签名。图片不内嵌到 XML，避免增加体积。XMLTV 字段、频道关联和跨日语义见 [接入说明](docs/xmltv.md)。
 
 ## 免费额度
 

@@ -14,6 +14,8 @@ test('decodes real website protobuf responses and discovers 73 channels', () => 
   assert(channels.every(c => c.logo.endsWith('.png')));
   assert(channels[0].aliases.includes('CCTV-1'));
   assert.equal(channels[0].group, '央视频道');
+  assert(channels[0].logo.endsWith('/main/assets/logos/cctv1.png'));
+  assert.equal(new URL(channels.find(c => c.id === 'hunanweishi').logo).hostname, 'resources.yangshipin.cn');
   assert.equal(channels.find(c => c.name === '湖南卫视').id, 'hunanweishi');
   assert.equal(channels.find(c => c.name === '湖南卫视').group, '卫视频道');
   assert(channels.some(c => c.name === '湖南卫视'));
@@ -47,6 +49,15 @@ test('checks real PNG signature, deduplicates shared logos and rejects disguised
   await assert.rejects(verifyPngLogos(channels, {
     fetchImpl: async () => new Response('RIFFwebp'), delay: async () => {},
   }), /not PNG/);
+});
+
+test('bundled CCTV logos pass checksum and PNG validation without fetching upstream copies', async () => {
+  const channels = extractChannels(decode('PageResponse', pageBytes))
+    .filter(c => new URL(c.logo).hostname === 'raw.githubusercontent.com');
+  assert.equal(channels.length, 34);
+  assert.equal(await verifyPngLogos(channels, {
+    fetchImpl: async () => { throw new Error('Project logos should be verified from the checkout'); },
+  }), 33);
 });
 
 test('rejects corrupt/truncated protobuf, non-200 API codes, and missing channels', () => {

@@ -1,0 +1,280 @@
+{
+  "source": "https://github.com/wanglindl/TVlogo",
+  "catalog": "https://github.com/wanglindl/TVlogo/blob/main/md/01.md",
+  "retrievedAt": "2026-09-09",
+  "style": "Original transparent PNG; silver gradient CCTV logos",
+  "logos": {
+    "cctv1": {
+      "file": "cctv1.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV1.png",
+      "sha256": "cd2539b999e714ac1ecf7b830f57c179c0ddddb9f8828770d41945d8653bc099",
+      "width": 300,
+      "height": 180,
+      "bytes": 20973
+    },
+    "cctv2": {
+      "file": "cctv2.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV2.png",
+      "sha256": "335732275afde1f2a7748de6d07e3d4ebd358d25d53f8d22b531dc528f9e16d9",
+      "width": 300,
+      "height": 180,
+      "bytes": 22666
+    },
+    "cctv3": {
+      "file": "cctv3.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV3.png",
+      "sha256": "324fcc9b194a7506f5818252199268ffc01f94804d8597aeb5124edbe316d5a4",
+      "width": 300,
+      "height": 180,
+      "bytes": 22389
+    },
+    "cctv4": {
+      "file": "cctv4.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV4.png",
+      "sha256": "066903eea74db7289bbb297e9fa319e8d250ba909c5ffe22480dab8541b9d7d6",
+      "width": 300,
+      "height": 180,
+      "bytes": 25431
+    },
+    "cctv5": {
+      "file": "cctv5.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV5.png",
+      "sha256": "d56e1933f6fd9346e1a7540eda02f03e413fb6e10621d883152d7361f524b7e6",
+      "width": 300,
+      "height": 180,
+      "bytes": 22072
+    },
+    "cctv5plus": {
+      "file": "cctv5plus.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV5plus.png",
+      "sha256": "62b1ff8272eab00e78bbca23a935353e2dbaa2dc086bb54815371a62d1496b0f",
+      "width": 300,
+      "height": 180,
+      "bytes": 27180
+    },
+    "cctv6": {
+      "file": "cctv6.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV6.png",
+      "sha256": "b6fed12f1372ccf3e2ea9ac27038e5c4610fb2981f1db5f82aa7e5645d04235f",
+      "width": 300,
+      "height": 180,
+      "bytes": 22440
+    },
+    "cctv7": {
+      "file": "cctv7.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV7.png",
+      "sha256": "de778796da1e7dcb5bc934a30e0edfc3f38122a1ad9ae1c97dac228d0c2cd58b",
+      "width": 300,
+      "height": 180,
+      "bytes": 25166
+    },
+    "cctv8": {
+      "file": "cctv8.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV8.png",
+      "sha256": "288dcebe26e4757627f6b4a508f9023cc8d4dfa742035112d0cbe2a439cd500f",
+      "width": 300,
+      "height": 180,
+      "bytes": 23896
+    },
+    "cctv9": {
+      "file": "cctv9.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV9.png",
+      "sha256": "d4e9f3f0f83a1823bf90343cc02ec64d30b72892c74c4912800322dbc6632eb9",
+      "width": 300,
+      "height": 180,
+      "bytes": 22401
+    },
+    "cctv10": {
+      "file": "cctv10.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV10.png",
+      "sha256": "e562f19555c4e346ce8047b5ffe64e1849fc3c8eda5f8335270f4aa5876375cc",
+      "width": 300,
+      "height": 180,
+      "bytes": 24331
+    },
+    "cctv11": {
+      "file": "cctv11.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV11.png",
+      "sha256": "9aaa5f3dc4541e78573e675a857ce93a0b768676849d98ad6d068e47252b90c7",
+      "width": 300,
+      "height": 180,
+      "bytes": 22291
+    },
+    "cctv12": {
+      "file": "cctv12.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV12.png",
+      "sha256": "ee431c56e147cd7248bd0e6e2474bd93cffe1ae9d090167fee530c02c7e4e283",
+      "width": 300,
+      "height": 180,
+      "bytes": 26172
+    },
+    "cctv13": {
+      "file": "cctv13.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV13.png",
+      "sha256": "ad69d5664c4aae6afe52a644501dbb4446fd802d083d5c03d65dd2d99ecca86e",
+      "width": 300,
+      "height": 180,
+      "bytes": 23008
+    },
+    "cctv14": {
+      "file": "cctv14.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV14.png",
+      "sha256": "e4cacaaefa72ff4104af3d0be709874ef5da6121f4fdba05cbe39063fac30976",
+      "width": 300,
+      "height": 180,
+      "bytes": 21826
+    },
+    "cctv15": {
+      "file": "cctv15.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV15.png",
+      "sha256": "87a56763ba6137f8971a5ed6d7819dc018512fa57f7bd2f281c0a6cd89fedcdd",
+      "width": 300,
+      "height": 180,
+      "bytes": 22042
+    },
+    "cctv16": {
+      "file": "cctv16.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV16.png",
+      "sha256": "4fd2a4ea34da59c634544c0b7efb6a4c82f586f92e05d6325b0e37486390a2c6",
+      "width": 300,
+      "height": 180,
+      "bytes": 32245
+    },
+    "cctv164k": {
+      "file": "cctv16.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV16.png",
+      "sha256": "4fd2a4ea34da59c634544c0b7efb6a4c82f586f92e05d6325b0e37486390a2c6",
+      "width": 300,
+      "height": 180,
+      "bytes": 32245
+    },
+    "cctv17": {
+      "file": "cctv17.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV17.png",
+      "sha256": "eb0609648ffb625a8ab5ed8e47e186e06ac1b90e429e4fa710233f2fed87be2e",
+      "width": 300,
+      "height": 180,
+      "bytes": 26433
+    },
+    "cctv4k": {
+      "file": "cctv4k.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV4K.png",
+      "sha256": "d5939282a3004325155140f61dfd3e8d90fb8f1b48c2051a17cd9c70ddd8cefa",
+      "width": 300,
+      "height": 180,
+      "bytes": 23104
+    },
+    "cctv8k": {
+      "file": "cctv8k.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTV8K.png",
+      "sha256": "1493b8e762546c019254a7bdf8838d5f700ef235fa616f6639c38ae00e893f36",
+      "width": 300,
+      "height": 180,
+      "bytes": 23933
+    },
+    "fengyunjuchang": {
+      "file": "fengyunjuchang.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVfyjc.png",
+      "sha256": "f1a0f659e637ef033ea940b9312d66da0d137c0f353a4dd035258d0702e243dd",
+      "width": 300,
+      "height": 180,
+      "bytes": 27991
+    },
+    "diyijuchang": {
+      "file": "diyijuchang.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVdyjc.png",
+      "sha256": "393a129cbfebc15b5737de40a055454c0b746bb6e25cadfe614be77275dceb4c",
+      "width": 300,
+      "height": 180,
+      "bytes": 27590
+    },
+    "huaijiujuchang": {
+      "file": "huaijiujuchang.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVhjjc.png",
+      "sha256": "82d0e2b7f5073ebf49850c38d950f8de483c80562fa36888ee3f63baf9523243",
+      "width": 300,
+      "height": 180,
+      "bytes": 27718
+    },
+    "shijiedili": {
+      "file": "shijiedili.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVsjdl.png",
+      "sha256": "a9b2d4fb8feb3789e20f752df0fc99deddcf5c4f978225e13c86d6bb5650b1ab",
+      "width": 300,
+      "height": 180,
+      "bytes": 27968
+    },
+    "fengyunyinyue": {
+      "file": "fengyunyinyue.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVfyyy.png",
+      "sha256": "d000b7fc6caa2a1a7b212756a293f3eace21a5894c3aed32fc11288346902ba0",
+      "width": 300,
+      "height": 180,
+      "bytes": 27422
+    },
+    "bingqikeji": {
+      "file": "bingqikeji.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVbqkj.png",
+      "sha256": "5258dd2bb21dea2de44240c3869fff82ce4c401a7f93d997662c21924505c27b",
+      "width": 300,
+      "height": 180,
+      "bytes": 28577
+    },
+    "fengyunzuqiu": {
+      "file": "fengyunzuqiu.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVfyzq.png",
+      "sha256": "78bd43029cd197c338537d6aa42a3d9f904b1b36792e81b4d8389be6d4a634c1",
+      "width": 300,
+      "height": 180,
+      "bytes": 27935
+    },
+    "gaoerfuwangqiu": {
+      "file": "gaoerfuwangqiu.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVgefwq.png",
+      "sha256": "cba95dae24ee22921266a7ea108d1aa7813428382c64b4ab39b67b4e52aa238b",
+      "width": 300,
+      "height": 180,
+      "bytes": 29133
+    },
+    "nvxingshishang": {
+      "file": "nvxingshishang.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVnxss.png",
+      "sha256": "b91530173630c28386b253fb710ed424e1c89b0e0dcea60d2e675fdc009b8d4b",
+      "width": 300,
+      "height": 180,
+      "bytes": 27927
+    },
+    "yangshiwenhuajingpin": {
+      "file": "yangshiwenhuajingpin.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVyswhjp.png",
+      "sha256": "230a247175fc211cd6703ec2d806b3385f12e3fda479e5ae489edcca7239d897",
+      "width": 300,
+      "height": 180,
+      "bytes": 29751
+    },
+    "yangshitaiqiu": {
+      "file": "yangshitaiqiu.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVystq.png",
+      "sha256": "937e0033d992f5f47732575a81ca0b0f7978551ea7f72a45aec330267c2662d1",
+      "width": 300,
+      "height": 180,
+      "bytes": 28440
+    },
+    "dianshizhinan": {
+      "file": "dianshizhinan.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVdszn.png",
+      "sha256": "fb4cb5f17cb416fd9815864881c3fe02e07a20778cd71e492e7cbde310373aa3",
+      "width": 300,
+      "height": 180,
+      "bytes": 27199
+    },
+    "weishengjiankang": {
+      "file": "weishengjiankang.png",
+      "sourceUrl": "https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/CCTVwsjk.png",
+      "sha256": "83268e1469e43afa3f87355f541fbeca78e128a93e9fe4f85dce3e6028360ce8",
+      "width": 300,
+      "height": 180,
+      "bytes": 27608
+    }
+  }
+}
