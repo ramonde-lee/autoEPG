@@ -59,15 +59,30 @@ https://github.com/TvWasm/autoEPG/releases/download/2026-09-09/epg.xml
 
 ## 播放器频道匹配
 
-频道 ID 使用稳定的 `ysp.<央视频PID>`，`channel/@id` 与 `programme/@channel` 完全一致。例如 CCTV1 为 `ysp.600001859`，名称保持网站原名，常见 CCTV 频道还包含 `CCTV-1` 等显示别名。`channels.json` 同步提供 `aliases`，便于应用映射。支持按名称匹配的播放器可直接匹配；否则设置 M3U 的 `tvg-id`：
+频道 ID 使用固定的小写英文或拼音，例如 `cctv3`、`cctv5plus`、`hunanweishi`；`channel/@id` 与 `programme/@channel` 完全一致。显示名称包含 `CCTV3`、`CCTV-3`、`央视综艺` 等别名，`channels.json` 同步提供 `aliases`。尚未配置的新频道暂用 `ysp<PID>`。支持按名称匹配的播放器可使用别名；精确匹配应设置 M3U 的 `tvg-id`：
 
 ```m3u
 #EXTM3U
-#EXTINF:-1 tvg-id="ysp.600001859" tvg-name="CCTV1",CCTV1
+#EXTINF:-1 tvg-id="cctv1" tvg-name="CCTV1" group-title="央视频道",CCTV1
 https://your-stream-provider.example/cctv1.m3u8
 ```
 
 播放地址为占位示例，本项目只提供节目单。
+
+本次频道映射升级为版本 2，旧的 `ysp.<PID>` 已改为上述 ID；已接入的应用可通过 `channels.json` 的 `legacyIds` 迁移，并更新 M3U 的 `tvg-id`。ID 区分大小写。命名和别名参考了 [老白 EPG](https://laobaiepg.laobaitv.net/guide_mainland.xml)（2026-09-09），映射表保存在 `src/channel-profiles.json`，运行时不依赖该服务。
+
+## 频道分组
+
+主文件的 `source-info-name="央视频"`，频道按“央视频道”“卫视频道”排列。XMLTV 没有标准的频道分组字段，因此不添加自定义 XML 字段；应用可读取 [channels.json](https://github.com/TvWasm/autoEPG/releases/latest/download/channels.json) 的 `groupId`、`group`，或 [groups.json](https://github.com/TvWasm/autoEPG/releases/latest/download/groups.json) 的频道 ID 列表和订阅文件索引。
+
+只需一类频道时，可订阅独立的标准 XMLTV 文件；分组文件的 `source-info-name` 为对应分组名称：
+
+| 分组 | 今天 | 今天、明天 | 今天、明天、后天 |
+| --- | --- | --- | --- |
+| 央视频道（`cctv`） | [epg-cctv.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg-cctv.xml) | [epg2-cctv.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg2-cctv.xml) | [epg3-cctv.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg3-cctv.xml) |
+| 卫视频道（`weishi`） | [epg-weishi.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg-weishi.xml) | [epg2-weishi.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg2-weishi.xml) | [epg3-weishi.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg3-weishi.xml) |
+
+分组跟随央视频源站分类（包括源站归入卫视频道的 CETV1）。日期版本也提供两个单日分组文件。分组和完整文件使用相同的频道 ID、别名及 PNG 台标。
 
 台标链接统一为真正的 PNG：移除源站将 PNG 转为 WebP 的 CDN 参数，并在每次抓取时通过无登录、无 Referer 的请求验证 PNG 文件签名。图片不内嵌到 XML，避免增加体积。XMLTV 字段、频道关联和跨日语义见 [接入说明](docs/xmltv.md)。
 

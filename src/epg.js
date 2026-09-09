@@ -4,6 +4,7 @@ import { mkdir, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { HOME } from './source.js';
+import { GROUPS, groupedChannels, groupFile } from './channels.js';
 
 const DAY = 86_400;
 const OFFSET = 8 * 3600;
@@ -101,7 +102,7 @@ export async function collect(source, {
   for (const p of result) counts.set(p.channel, (counts.get(p.channel) ?? 0) + 1);
   const manifest = {
     generatedAt: new Date().toISOString(), referenceDate: today, source: HOME,
-    format: 'XMLTV', encoding: 'UTF-8', timezone: 'Asia/Shanghai', logoFormat: 'PNG',
+    format: 'XMLTV', channelSchemaVersion: 2, encoding: 'UTF-8', timezone: 'Asia/Shanghai', logoFormat: 'PNG',
     requestedDates: { from: first, to: last },
     channelCount: channels.length, programmeCount: result.length,
     channelsWithProgrammes: counts.size, todayChannelCoverage: coverage,
@@ -113,14 +114,15 @@ export async function collect(source, {
   return { channels, programmes: result, manifest };
 }
 
-export function renderXml(channels, programmes) {
+export function renderXml(channels, programmes, { sourceName = '央视频' } = {}) {
   const doc = create({ version: '1.0', encoding: 'UTF-8' });
   const tv = doc.ele('tv', {
     'generator-info-name': 'autoEPG', 'generator-info-url': 'https://github.com/TvWasm/autoEPG',
-    'source-info-name': '央视频', 'source-info-url': HOME,
+    'source-info-name': sourceName, 'source-info-url': HOME,
   });
   const ids = new Set();
-  for (const c of channels) {
+  const ordered = groupedChannels(channels);
+  for (const c of ordered) {
     if (ids.has(c.id)) throw new Error(`Duplicate channel ${c.id}`);
     ids.add(c.id);
     const channel = tv.ele('channel', { id: c.id });
@@ -130,7 +132,8 @@ export function renderXml(channels, programmes) {
     if (/^https?:\/\//.test(c.logo)) channel.ele('icon', { src: c.logo });
     channel.ele('url').txt(`${HOME}?pid=${c.pid}`);
   }
-  for (const p of programmes) {
+  const rank = new Map(ordered.map((c, i) => [c.id, i]));
+  for (const p of [...programmes].sort((a, b) => rank.get(a.channel) - rank.get(b.channel) || a.start - b.start)) {
     if (!ids.has(p.channel)) throw new Error(`Unknown channel ${p.channel}`);
     tv.ele('programme', { start: xmltvTime(p.start), stop: xmltvTime(p.stop), channel: p.channel })
       .ele('title', /\p{Script=Han}/u.test(p.title) ? { lang: 'zh' } : {}).txt(cleanText(p.title));
@@ -170,7 +173,26 @@ export async function writeArtifacts(directory, dataset) {
           programmeCount: combined.length, bytes: files[name].length });
       }
     }
+    const variants = [...manifest.variants];
+    const groups = [];
+    for (const group of GROUPS) {
+      const members = dataset.channels.filter(c => c.groupId === group.id);
+      if (!members.length) continue;
+      const ids = new Set(members.map(c => c.id));
+      const feeds = [];
+      for (const variant of variants) {
+        const name = groupFile(variant.file, group.id);
+        const subset = dataset.programmes.filter(p => ids.has(p.channel) && p.start < day + variant.days * DAY && p.stop > day);
+        files[name] = Buffer.from(renderXml(members, subset, { sourceName: group.name }));
+        const feed = { file: name, days: variant.days, from: variant.from, to: variant.to,
+          programmeCount: subset.length, bytes: files[name].length, groupId: group.id };
+        feeds.push(feed);
+        manifest.variants.push(feed);
+      }
+      groups.push({ id: group.id, name: group.name, channelIds: members.map(c => c.id), feeds });
+    }
     files['channels.json'] = Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n');
+    files['groups.json'] = Buffer.from(JSON.stringify({ source: '央视频', channelSchemaVersion: 2, groups }, null, 2) + '\n');
     files['manifest.json'] = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
     files['SHA256SUMS'] = Buffer.from(Object.entries(files).map(([name, data]) =>
       `${createHash('sha256').update(data).digest('hex')}  ${name}\n`).join(''));

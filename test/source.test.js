@@ -10,9 +10,12 @@ test('decodes real website protobuf responses and discovers 73 channels', () => 
   const channels = extractChannels(decode('PageResponse', pageBytes));
   assert.equal(channels.length, 73);
   assert.equal(channels[0].name, 'CCTV1');
-  assert.equal(channels[0].id, 'ysp.600001859');
+  assert.equal(channels[0].id, 'cctv1');
   assert(channels.every(c => c.logo.endsWith('.png')));
-  assert.deepEqual(channels[0].aliases, ['CCTV1', 'CCTV-1']);
+  assert(channels[0].aliases.includes('CCTV-1'));
+  assert.equal(channels[0].group, '央视频道');
+  assert.equal(channels.find(c => c.name === '湖南卫视').id, 'hunanweishi');
+  assert.equal(channels.find(c => c.name === '湖南卫视').group, '卫视频道');
   assert(channels.some(c => c.name === '湖南卫视'));
   const programmes = decode('ProgrammeResponse', programmeBytes).dataList;
   assert.equal(programmes.length, 39);

@@ -1,6 +1,7 @@
 import protobuf from 'protobufjs';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { channelProfile, groupedChannels } from './channels.js';
 
 export const HOME = 'https://www.yangshipin.cn/tv/home';
 const API = 'https://capi.yangshipin.cn/api/';
@@ -98,9 +99,10 @@ export function extractChannels(page) {
         throw new Error(`Invalid programme date for ${c.pid}`);
       }
       const channel = {
-        id: `ysp.${c.pid}`, pid: c.pid, name: c.channelName.trim(),
-        logo: pngLogo(c.tvLogo), aliases: channelAliases(c.channelName.trim()), group: c.channelType ?? '', dates,
+        ...channelProfile(c.pid, c.channelName.trim(), c.channelType), pid: c.pid,
+        logo: pngLogo(c.tvLogo), dates,
       };
+      channel.aliases = [...new Set([...channel.aliases, ...channelAliases(c.channelName.trim())])];
       const previous = channels.get(c.pid);
       if (previous && previous.name !== channel.name) throw new Error(`Conflicting channel ${c.pid}`);
       if (previous) channel.dates = [...new Set([...previous.dates, ...dates])].sort();
@@ -108,7 +110,9 @@ export function extractChannels(page) {
     }
   }
   if (!channels.size) throw new Error('No TV channels found; upstream schema may have changed');
-  return [...channels.values()];
+  const result = groupedChannels([...channels.values()]);
+  if (new Set(result.map(c => c.id)).size !== result.length) throw new Error('Duplicate normalized channel IDs');
+  return result;
 }
 
 export class Yangshipin {

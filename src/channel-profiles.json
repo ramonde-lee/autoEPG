@@ -1,0 +1,819 @@
+{
+  "600001859": {
+    "id": "cctv1",
+    "name": "CCTV1",
+    "aliases": [
+      "CCTV1",
+      "CCTV-1",
+      "CCTV-1 综合",
+      "CCTV 1",
+      "中央一套",
+      "央视一套"
+    ],
+    "order": 0
+  },
+  "600001800": {
+    "id": "cctv2",
+    "name": "CCTV2",
+    "aliases": [
+      "CCTV2",
+      "CCTV-2",
+      "CCTV-2 财经",
+      "CCTV 2",
+      "中央二套",
+      "央视财经"
+    ],
+    "order": 1
+  },
+  "600001801": {
+    "id": "cctv3",
+    "name": "CCTV3",
+    "aliases": [
+      "CCTV3",
+      "CCTV-3",
+      "CCTV-3 综艺",
+      "CCTV 3",
+      "中央三套",
+      "央视综艺"
+    ],
+    "order": 2
+  },
+  "600001814": {
+    "id": "cctv4",
+    "name": "CCTV4",
+    "aliases": [
+      "CCTV4",
+      "CCTV-4",
+      "CCTV-4 中文国际",
+      "CCTV 4",
+      "中央四套",
+      "央视中文国际"
+    ],
+    "order": 3
+  },
+  "600001818": {
+    "id": "cctv5",
+    "name": "CCTV5",
+    "aliases": [
+      "CCTV5",
+      "CCTV-5",
+      "CCTV-5 体育",
+      "CCTV 5",
+      "中央五套",
+      "央视体育"
+    ],
+    "order": 4
+  },
+  "600001817": {
+    "id": "cctv5plus",
+    "name": "CCTV5+",
+    "aliases": [
+      "CCTV5+",
+      "CCTV-5+",
+      "CCTV-5+ 体育赛事",
+      "CCTV 5+",
+      "CCTV5PLUS",
+      "中央五套+"
+    ],
+    "order": 5
+  },
+  "600108442": {
+    "id": "cctv6",
+    "name": "CCTV6",
+    "aliases": [
+      "CCTV6",
+      "CCTV-6",
+      "CCTV-6 电影",
+      "CCTV 6",
+      "中央六套",
+      "央视电影"
+    ],
+    "order": 6
+  },
+  "600004092": {
+    "id": "cctv7",
+    "name": "CCTV7",
+    "aliases": [
+      "CCTV7",
+      "CCTV-7",
+      "CCTV-7 国防军事",
+      "CCTV 7",
+      "中央七套",
+      "央视军事"
+    ],
+    "order": 7
+  },
+  "600001803": {
+    "id": "cctv8",
+    "name": "CCTV8",
+    "aliases": [
+      "CCTV8",
+      "CCTV-8",
+      "CCTV-8 电视剧",
+      "CCTV 8",
+      "中央八套",
+      "央视电视剧"
+    ],
+    "order": 8
+  },
+  "600004078": {
+    "id": "cctv9",
+    "name": "CCTV9",
+    "aliases": [
+      "CCTV9",
+      "CCTV-9",
+      "CCTV-9 纪录",
+      "CCTV 9",
+      "中央九套",
+      "央视纪录"
+    ],
+    "order": 9
+  },
+  "600001805": {
+    "id": "cctv10",
+    "name": "CCTV10",
+    "aliases": [
+      "CCTV10",
+      "CCTV-10",
+      "CCTV-10 科教",
+      "CCTV 10",
+      "中央十套",
+      "央视科教"
+    ],
+    "order": 10
+  },
+  "600001806": {
+    "id": "cctv11",
+    "name": "CCTV11",
+    "aliases": [
+      "CCTV11",
+      "CCTV-11",
+      "CCTV-11 戏曲",
+      "CCTV 11",
+      "中央十一套",
+      "央视戏曲"
+    ],
+    "order": 11
+  },
+  "600001807": {
+    "id": "cctv12",
+    "name": "CCTV12",
+    "aliases": [
+      "CCTV12",
+      "CCTV-12",
+      "CCTV-12 社会与法",
+      "CCTV 12",
+      "中央十二套",
+      "央视社会法制"
+    ],
+    "order": 12
+  },
+  "600001811": {
+    "id": "cctv13",
+    "name": "CCTV13",
+    "aliases": [
+      "CCTV13",
+      "CCTV-13",
+      "CCTV-13 新闻",
+      "CCTV 13",
+      "中央十三套",
+      "央视新闻"
+    ],
+    "order": 13
+  },
+  "600001809": {
+    "id": "cctv14",
+    "name": "CCTV14",
+    "aliases": [
+      "CCTV14",
+      "CCTV-14",
+      "CCTV-14 少儿",
+      "CCTV 14",
+      "中央十四套",
+      "央视少儿"
+    ],
+    "order": 14
+  },
+  "600001815": {
+    "id": "cctv15",
+    "name": "CCTV15",
+    "aliases": [
+      "CCTV15",
+      "CCTV-15",
+      "CCTV-15 音乐",
+      "CCTV 15",
+      "中央十五套",
+      "央视音乐"
+    ],
+    "order": 15
+  },
+  "600098637": {
+    "id": "cctv16",
+    "name": "CCTV16",
+    "aliases": [
+      "CCTV16",
+      "CCTV16-HD",
+      "CCTV-16",
+      "CCTV-16 奥林匹克",
+      "CCTV 16",
+      "央视奥林匹克"
+    ],
+    "order": 16
+  },
+  "600099502": {
+    "id": "cctv164k",
+    "name": "CCTV16-4K",
+    "aliases": [
+      "CCTV16-4K",
+      "CCTV16(4K）",
+      "CCTV16(4K)",
+      "CCTV-16-4K"
+    ],
+    "order": 17
+  },
+  "600001810": {
+    "id": "cctv17",
+    "name": "CCTV17",
+    "aliases": [
+      "CCTV17",
+      "CCTV-17",
+      "CCTV-17 农业农村",
+      "CCTV 17",
+      "央视农业农村"
+    ],
+    "order": 18
+  },
+  "600002264": {
+    "id": "cctv4k",
+    "name": "CCTV4K",
+    "aliases": [
+      "CCTV4K",
+      "CCTV-4K 超高清",
+      "CCTV-4K",
+      "CCTV 4K",
+      "央视4K"
+    ],
+    "order": 19
+  },
+  "600156816": {
+    "id": "cctv8k",
+    "name": "CCTV8K",
+    "aliases": [
+      "CCTV8K"
+    ],
+    "order": 20
+  },
+  "600014550": {
+    "id": "cgtnyingyu",
+    "name": "CGTN",
+    "aliases": [
+      "CGTN",
+      "中国国际电视台",
+      "CGTNEnglish",
+      "CGTN英语",
+      "CGTN新闻"
+    ],
+    "order": 21
+  },
+  "600084704": {
+    "id": "cgtnfayu",
+    "name": "CGTN法语",
+    "aliases": [
+      "CGTN法语",
+      "CGTN法语频道",
+      "CGTN 法语",
+      "CGTNFrench",
+      "CGTNFrancais",
+      "CGTN Français",
+      "cgtnfayupindao"
+    ],
+    "order": 22
+  },
+  "600084758": {
+    "id": "cgtneyu",
+    "name": "CGTN俄语",
+    "aliases": [
+      "CGTN俄语",
+      "CGTN俄语频道",
+      "CGTN 俄语",
+      "CGTNRussian",
+      "cgtneyupindao"
+    ],
+    "order": 23
+  },
+  "600084782": {
+    "id": "cgtnalayu",
+    "name": "CGTN阿语",
+    "aliases": [
+      "CGTN阿语",
+      "CGTN阿拉伯语频道",
+      "CGTN 阿语",
+      "CGTN阿拉伯语",
+      "CGTNArabic",
+      "cgtnalapindao"
+    ],
+    "order": 24
+  },
+  "600084744": {
+    "id": "cgtnxiyu",
+    "name": "CGTN西语",
+    "aliases": [
+      "CGTN西语",
+      "CGTN西班牙语频道",
+      "CGTN 西语",
+      "CGTN西班牙语",
+      "CGTNSpanish",
+      "CGTNEspanol",
+      "CGTN Español"
+    ],
+    "order": 25
+  },
+  "600084781": {
+    "id": "cgtnjilu",
+    "name": "CGTN纪录",
+    "aliases": [
+      "CGTN纪录",
+      "CGTN外语纪录频道",
+      "CGTN 纪录",
+      "CGTN纪录频道",
+      "CGTN记录",
+      "CGTN 记录",
+      "CGTN Documentary"
+    ],
+    "order": 26
+  },
+  "600099658": {
+    "id": "fengyunjuchang",
+    "name": "风云剧场",
+    "aliases": [
+      "风云剧场",
+      "CCTV风云剧场频道"
+    ],
+    "order": 27
+  },
+  "600099655": {
+    "id": "diyijuchang",
+    "name": "第一剧场",
+    "aliases": [
+      "第一剧场",
+      "CCTV第一剧场频道"
+    ],
+    "order": 28
+  },
+  "600099620": {
+    "id": "huaijiujuchang",
+    "name": "怀旧剧场",
+    "aliases": [
+      "怀旧剧场",
+      "CCTV怀旧剧场频道"
+    ],
+    "order": 29
+  },
+  "600099637": {
+    "id": "shijiedili",
+    "name": "世界地理",
+    "aliases": [
+      "世界地理",
+      "CCTV世界地理频道"
+    ],
+    "order": 30
+  },
+  "600099660": {
+    "id": "fengyunyinyue",
+    "name": "风云音乐",
+    "aliases": [
+      "风云音乐",
+      "CCTV风云音乐频道"
+    ],
+    "order": 31
+  },
+  "600099649": {
+    "id": "bingqikeji",
+    "name": "兵器科技",
+    "aliases": [
+      "兵器科技",
+      "CCTV兵器科技频道"
+    ],
+    "order": 32
+  },
+  "600099636": {
+    "id": "fengyunzuqiu",
+    "name": "风云足球",
+    "aliases": [
+      "风云足球",
+      "CCTV风云足球频道"
+    ],
+    "order": 33
+  },
+  "600099659": {
+    "id": "gaoerfuwangqiu",
+    "name": "高尔夫网球",
+    "aliases": [
+      "高尔夫网球",
+      "CCTV高尔夫·网球频道"
+    ],
+    "order": 34
+  },
+  "600099650": {
+    "id": "nvxingshishang",
+    "name": "女性时尚",
+    "aliases": [
+      "女性时尚",
+      "CCTV女性时尚频道"
+    ],
+    "order": 35
+  },
+  "600099653": {
+    "id": "yangshiwenhuajingpin",
+    "name": "央视文化精品",
+    "aliases": [
+      "央视文化精品",
+      "CCTV央视文化精品频道"
+    ],
+    "order": 36
+  },
+  "600099652": {
+    "id": "yangshitaiqiu",
+    "name": "央视台球",
+    "aliases": [
+      "央视台球",
+      "CCTV央视台球频道"
+    ],
+    "order": 37
+  },
+  "600099656": {
+    "id": "dianshizhinan",
+    "name": "电视指南",
+    "aliases": [
+      "电视指南",
+      "CCTV电视指南频道"
+    ],
+    "order": 38
+  },
+  "600099651": {
+    "id": "weishengjiankang",
+    "name": "卫生健康",
+    "aliases": [
+      "卫生健康",
+      "CCTV卫生健康频道"
+    ],
+    "order": 39
+  },
+  "600002309": {
+    "id": "beijingweishi",
+    "name": "北京卫视",
+    "aliases": [
+      "北京卫视",
+      "北京卫视4K",
+      "BTV1",
+      "BTV卫视",
+      "北京台"
+    ],
+    "order": 40
+  },
+  "600002521": {
+    "id": "jiangsuweishi",
+    "name": "江苏卫视",
+    "aliases": [
+      "江苏卫视",
+      "江苏卫视4K",
+      "江苏卫视 4K",
+      "江苏台",
+      "JiangsuTV"
+    ],
+    "order": 41
+  },
+  "600002483": {
+    "id": "dongfangweishi",
+    "name": "东方卫视",
+    "aliases": [
+      "东方卫视",
+      "东方卫视4K",
+      "东方卫视 4K",
+      "东方台",
+      "DragonTV"
+    ],
+    "order": 42
+  },
+  "600002520": {
+    "id": "zhejiangweishi",
+    "name": "浙江卫视",
+    "aliases": [
+      "浙江卫视",
+      "浙江卫视4K",
+      "浙江台",
+      "ZhejiangTV",
+      "ZJTV"
+    ],
+    "order": 43
+  },
+  "600002475": {
+    "id": "hunanweishi",
+    "name": "湖南卫视",
+    "aliases": [
+      "湖南卫视",
+      "湖南卫视4K",
+      "湖南卫视 4K",
+      "芒果TV",
+      "湖南台"
+    ],
+    "order": 44
+  },
+  "600002508": {
+    "id": "hubeiweishi",
+    "name": "湖北卫视",
+    "aliases": [
+      "湖北卫视",
+      "湖北台",
+      "HubeiTV"
+    ],
+    "order": 45
+  },
+  "600002485": {
+    "id": "guangdongweishi",
+    "name": "广东卫视",
+    "aliases": [
+      "广东卫视",
+      "广东卫视4K",
+      "广东卫视 4K",
+      "广东台",
+      "GuangdongTV"
+    ],
+    "order": 46
+  },
+  "600002509": {
+    "id": "guangxiweishi",
+    "name": "广西卫视",
+    "aliases": [
+      "广西卫视",
+      "广西台",
+      "GuangxiTV"
+    ],
+    "order": 47
+  },
+  "600002498": {
+    "id": "heilongjiangweishi",
+    "name": "黑龙江卫视",
+    "aliases": [
+      "黑龙江卫视",
+      "黑龙江台",
+      "HeilongjiangTV"
+    ],
+    "order": 48
+  },
+  "600002506": {
+    "id": "hainanweishi",
+    "name": "海南卫视",
+    "aliases": [
+      "海南卫视",
+      "旅游卫视",
+      "海南台",
+      "HainanTV"
+    ],
+    "order": 49
+  },
+  "600002531": {
+    "id": "chongqingweishi",
+    "name": "重庆卫视",
+    "aliases": [
+      "重庆卫视",
+      "重庆台",
+      "ChongqingTV"
+    ],
+    "order": 50
+  },
+  "600002481": {
+    "id": "shenzhenweishi",
+    "name": "深圳卫视",
+    "aliases": [
+      "深圳卫视",
+      "深圳卫视4K",
+      "SZTV",
+      "ShenzhenTV"
+    ],
+    "order": 51
+  },
+  "600002516": {
+    "id": "sichuanweishi",
+    "name": "四川卫视",
+    "aliases": [
+      "四川卫视",
+      "四川卫视4K",
+      "四川卫视 4K",
+      "四川台",
+      "SichuanTV"
+    ],
+    "order": 52
+  },
+  "600002525": {
+    "id": "henanweishi",
+    "name": "河南卫视",
+    "aliases": [
+      "河南卫视",
+      "河南台",
+      "HenanTV"
+    ],
+    "order": 53
+  },
+  "600002484": {
+    "id": "dongnanweishi",
+    "name": "东南卫视",
+    "aliases": [
+      "东南卫视",
+      "福建东南卫视",
+      "SETV",
+      "SoutheastTV",
+      "福建卫视"
+    ],
+    "order": 54
+  },
+  "600002490": {
+    "id": "guizhouweishi",
+    "name": "贵州卫视",
+    "aliases": [
+      "贵州卫视",
+      "贵州台",
+      "GuizhouTV"
+    ],
+    "order": 55
+  },
+  "600002503": {
+    "id": "jiangxiweishi",
+    "name": "江西卫视",
+    "aliases": [
+      "江西卫视",
+      "江西台",
+      "JiangxiTV",
+      "JXTV"
+    ],
+    "order": 56
+  },
+  "600002505": {
+    "id": "liaoningweishi",
+    "name": "辽宁卫视",
+    "aliases": [
+      "辽宁卫视",
+      "辽宁台",
+      "LiaoningTV",
+      "LNTV"
+    ],
+    "order": 57
+  },
+  "600002532": {
+    "id": "anhuiweishi",
+    "name": "安徽卫视",
+    "aliases": [
+      "安徽卫视",
+      "安徽台",
+      "AnhuiTV",
+      "AHTV"
+    ],
+    "order": 58
+  },
+  "600002493": {
+    "id": "hebeiweishi",
+    "name": "河北卫视",
+    "aliases": [
+      "河北卫视",
+      "河北台",
+      "HebeiTV"
+    ],
+    "order": 59
+  },
+  "600002513": {
+    "id": "shandongweishi",
+    "name": "山东卫视",
+    "aliases": [
+      "山东卫视",
+      "山东卫视4K",
+      "山东卫视 4K",
+      "山东台",
+      "ShandongTV"
+    ],
+    "order": 60
+  },
+  "600152137": {
+    "id": "tianjinweishi",
+    "name": "天津卫视",
+    "aliases": [
+      "天津卫视",
+      "天津台",
+      "TianjinTV",
+      "TJTV"
+    ],
+    "order": 61
+  },
+  "600190405": {
+    "id": "jilinweishi",
+    "name": "吉林卫视",
+    "aliases": [
+      "吉林卫视",
+      "吉林台",
+      "JilinTV"
+    ],
+    "order": 62
+  },
+  "600190400": {
+    "id": "shaanxiweishi",
+    "name": "陕西卫视",
+    "aliases": [
+      "陕西卫视",
+      "陕西台",
+      "ShaanxiTV",
+      "SXTV"
+    ],
+    "order": 63
+  },
+  "600190408": {
+    "id": "gansuweishi",
+    "name": "甘肃卫视",
+    "aliases": [
+      "甘肃卫视",
+      "甘肃台",
+      "GansuTV"
+    ],
+    "order": 64
+  },
+  "600190737": {
+    "id": "ningxiaweishi",
+    "name": "宁夏卫视",
+    "aliases": [
+      "宁夏卫视",
+      "宁夏台",
+      "NingxiaTV"
+    ],
+    "order": 65
+  },
+  "600190401": {
+    "id": "neimengguweishi",
+    "name": "内蒙古卫视",
+    "aliases": [
+      "内蒙古卫视",
+      "内蒙古台",
+      "InnerMongoliaTV",
+      "NMGTV"
+    ],
+    "order": 66
+  },
+  "600190402": {
+    "id": "yunnanweishi",
+    "name": "云南卫视",
+    "aliases": [
+      "云南卫视",
+      "云南台",
+      "YunnanTV"
+    ],
+    "order": 67
+  },
+  "600190407": {
+    "id": "shanxiweishi",
+    "name": "山西卫视",
+    "aliases": [
+      "山西卫视",
+      "山西台",
+      "ShanxiTV",
+      "SXanxiTV"
+    ],
+    "order": 68
+  },
+  "600190406": {
+    "id": "qinghaiweishi",
+    "name": "青海卫视",
+    "aliases": [
+      "青海卫视",
+      "青海台",
+      "QinghaiTV"
+    ],
+    "order": 69
+  },
+  "600190403": {
+    "id": "xizangweishi",
+    "name": "西藏卫视",
+    "aliases": [
+      "西藏卫视",
+      "西藏台",
+      "XizangTV"
+    ],
+    "order": 70
+  },
+  "600171827": {
+    "id": "cetv1",
+    "name": "CETV1",
+    "aliases": [
+      "CETV1",
+      "中国教育电视台1频道",
+      "CETV-1"
+    ],
+    "order": 71
+  },
+  "600152138": {
+    "id": "xinjiangweishi",
+    "name": "新疆卫视",
+    "aliases": [
+      "新疆卫视",
+      "新疆台",
+      "XinjiangTV"
+    ],
+    "order": 72
+  }
+}
