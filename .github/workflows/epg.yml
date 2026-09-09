@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      rebuild_releases:
+        description: 'Delete all Releases and their tags, then rebuild date versions'
+        type: boolean
+        required: false
+        default: false
   schedule:
     # UTC 16:00 -> next day 00:00 in Beijing. GitHub may delay scheduled runs.
     - cron: '0 16 * * *'
@@ -50,5 +56,6 @@ jobs:
       - name: Refresh daily releases and promote today to Latest
         env:
           GH_TOKEN: ${{ github.token }}
+          REBUILD_RELEASES: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_releases }}
         run: |
           node src/publish.js dist | tee -a "$GITHUB_STEP_SUMMARY"

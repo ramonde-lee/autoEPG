@@ -2,7 +2,9 @@ import { GitHub, publishDirectory } from './releases.js';
 
 try {
   const api = new GitHub(process.env.GITHUB_REPOSITORY, process.env.GH_TOKEN);
-  const count = await publishDirectory(api, process.argv[2] ?? 'dist', process.env.GITHUB_SHA ?? 'main');
+  const count = await publishDirectory(api, process.argv[2] ?? 'dist', process.env.GITHUB_SHA ?? 'main', {
+    rebuild: process.env.REBUILD_RELEASES === 'true',
+  });
   console.log(`Published/refreshed ${count} daily releases`);
 } catch (error) {
   console.error(error.message);

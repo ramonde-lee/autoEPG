@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ASSETS, releasePolicy, upsertRelease, publishDirectory } from '../src/releases.js';
+import { ASSETS, releasePolicy, upsertRelease, publishDirectory, deleteAllReleases } from '../src/releases.js';
 import { collect, writeArtifacts } from '../src/epg.js';
 
 class FakeGitHub {
@@ -14,7 +14,19 @@ class FakeGitHub {
   latest = null;
   published = [];
   uploadCount = 0;
+  tags = new Map();
+  tagObjects = new Map();
   async call(method, path, body, config) {
+    if (method === 'GET' && path.startsWith('/git/ref/tags/')) return this.tags.get(path.slice('/git/ref/tags/'.length)) ?? null;
+    if (method === 'POST' && path === '/git/tags') {
+      const tag = { ...body, sha: `tag-${this.nextId++}` };
+      this.tagObjects.set(tag.sha, tag);
+      return structuredClone(tag);
+    }
+    if (method === 'POST' && path === '/git/refs') {
+      this.tags.set(body.ref.slice('refs/tags/'.length), { object: { type: 'tag', sha: body.sha } });
+      return body;
+    }
     if (method === 'GET' && path.startsWith('/releases/tags/')) {
       return structuredClone(this.releases.find(r => r.tag_name === path.split('/').at(-1)) ?? null);
     }
@@ -132,7 +144,7 @@ test('publishes and replaces the two-day and three-day subscription assets', asy
   assert.equal(api.releases[0].assets.find(a => a.name === 'epg3.xml').size, 18);
 });
 
-test('publishes date directories with checksums, sets today first and refuses stale/corrupt input', async () => {
+test('publishes in calendar order with dated annotated tags and refuses stale/corrupt input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'autoepg-release-test-'));
   try {
     const dates = ['2026-09-08', '2026-09-09', '2026-09-10'];
@@ -145,11 +157,30 @@ test('publishes date directories with checksums, sets today first and refuses st
     const api = new FakeGitHub();
     const config = { currentDate: () => options.today };
     assert.equal(await publishDirectory(api, dir, 'abc', config), 3);
-    assert.deepEqual(api.published, ['2026-09-09', '2026-09-08', '2026-09-10']);
+    assert.deepEqual(api.published, ['2026-09-08', '2026-09-09', '2026-09-10']);
+    for (const date of dates) {
+      const tag = api.tagObjects.get(api.tags.get(date).object.sha);
+      assert.equal(tag.tagger.date, `${date}T00:00:00+08:00`);
+    }
     assert.equal(api.latest, options.today);
     await assert.rejects(publishDirectory(api, dir, 'abc', { currentDate: () => '2026-09-10' }), /Scrape date/);
     await writeFile(join(dir, options.today, 'epg.xml'), 'corrupt');
-    await assert.rejects(publishDirectory(api, dir, 'abc', config), /Checksum/);
+    await assert.rejects(publishDirectory(api, dir, 'abc', { ...config, rebuild: true }), /Checksum/);
     assert.equal(api.published.length, 3);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('rebuild snapshots every page before deleting releases and only their associated tags', async () => {
+  const calls = [];
+  const releases = Array.from({ length: 101 }, (_, id) => ({ id, tag_name: `old-${id}` }));
+  const api = { call: async (method, path) => {
+    calls.push({ method, path });
+    if (method === 'GET') return path.endsWith('page=1') ? releases.slice(0, 100) : releases.slice(100);
+    return null;
+  } };
+  assert.equal(await deleteAllReleases(api), 101);
+  assert.deepEqual(calls.slice(0, 2).map(c => c.method), ['GET', 'GET']);
+  assert.equal(calls.filter(c => c.method === 'DELETE' && c.path.startsWith('/releases/')).length, 101);
+  assert.equal(calls.filter(c => c.method === 'DELETE' && c.path.startsWith('/git/refs/tags/')).length, 101);
+  assert(!calls.some(c => c.path.includes('/heads/')));
 });

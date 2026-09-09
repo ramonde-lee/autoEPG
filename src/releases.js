@@ -43,10 +43,44 @@ export class GitHub {
   }
 }
 
+export async function ensureDateTag(api, date, commit) {
+  windowFor(date, 0, 0);
+  const ref = await api.call('GET', `/git/ref/tags/${date}`, undefined, { allow404: true });
+  if (ref) return;
+  // The tag date is the schedule date, independent of the generator commit date.
+  const tag = await api.call('POST', '/git/tags', {
+    tag: date, message: `EPG schedule for ${date} (Asia/Shanghai)`, object: commit, type: 'commit',
+    tagger: { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com',
+      date: `${date}T00:00:00+08:00` },
+  });
+  await api.call('POST', '/git/refs', { ref: `refs/tags/${date}`, sha: tag.sha });
+}
+
+export async function deleteAllReleases(api) {
+  const releases = [];
+  // Snapshot all pages before deleting, so pagination cannot skip shifted entries.
+  for (let page = 1; ; page++) {
+    const batch = await api.call('GET', `/releases?per_page=100&page=${page}`);
+    releases.push(...batch);
+    if (batch.length < 100) break;
+  }
+  if (releases.some(r => r.immutable)) throw new Error('Cannot rebuild immutable releases');
+  for (const release of releases) {
+    await api.call('DELETE', `/releases/${release.id}`);
+    console.log(`Deleted Release ${release.tag_name}`);
+  }
+  // Recreate only tags attached to the deleted releases; leave unrelated tags alone.
+  for (const tag of new Set(releases.map(r => r.tag_name))) {
+    await api.call('DELETE', `/git/refs/tags/${encodeURIComponent(tag)}`, undefined, { allow404: true });
+  }
+  return releases.length;
+}
+
 export async function upsertRelease(api, { date, today, commit, body, files }) {
   const policy = releasePolicy(date, today);
   let release = await api.call('GET', `/releases/tags/${date}`, undefined, { allow404: true });
   if (release?.immutable) throw new Error(`Release ${date} is immutable; disable release immutability to refresh daily assets`);
+  await ensureDateTag(api, date, commit);
   if (!release) release = await api.call('POST', '/releases', {
     ...policy, target_commitish: commit, body, draft: true, make_latest: 'false',
   });
@@ -93,7 +127,7 @@ export async function upsertRelease(api, { date, today, commit, body, files }) {
 }
 
 export async function publishDirectory(api, directory, commit, {
-  currentDate = () => dateKey(Date.now() / 1000), today = currentDate(),
+  currentDate = () => dateKey(Date.now() / 1000), today = currentDate(), rebuild = false,
 } = {}) {
   const index = JSON.parse(await readFile(join(directory, 'releases.json'), 'utf8'));
   if (index.referenceDate !== today) throw new Error('Scrape date is not today; regenerate before publishing');
@@ -118,8 +152,11 @@ export async function publishDirectory(api, directory, commit, {
       `[本日 XML](${base}/download/${entry.date}/epg.xml) · [当天固定订阅](${base}/latest/download/epg.xml)`;
     prepared.push({ date: entry.date, today, commit, files, body });
   }
-  // Switch today's subscription first; future releases can never replace Latest.
-  prepared.sort((a, b) => Number(b.date === today) - Number(a.date === today) || a.date.localeCompare(b.date));
+  if (currentDate() !== today) throw new Error('Beijing midnight crossed before publishing; regenerate schedules');
+  // Destructive rebuild is explicitly opt-in and happens only after full validation.
+  if (rebuild) await deleteAllReleases(api);
+  // Publish in calendar order; annotated date tags keep the UI sorted newest first.
+  prepared.sort((a, b) => a.date.localeCompare(b.date));
   for (const item of prepared) {
     if (currentDate() !== today) {
       throw new Error('Beijing midnight crossed while publishing; rerun with fresh schedules');
