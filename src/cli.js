@@ -32,6 +32,9 @@ try {
       minTodayCoverage,
       onProgress: (done, total) => { if (done % 50 === 0 || done === total) console.log(`Schedules ${done}/${total}`); },
     });
+    if (dataset.manifest.discardedProgrammes.length) {
+      console.warn(`Skipped ${dataset.manifest.discardedProgrammes.length} zero-duration programme records; details in manifest.json discardedProgrammes`);
+    }
     const index = await writeArtifacts(values.output, dataset);
     console.log(JSON.stringify(index, null, 2));
   }

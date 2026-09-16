@@ -44,6 +44,50 @@ test('deduplicates identical rows but rejects conflicting schedules', () => {
   assert.throws(() => deduplicate([p, { ...p, title: 'Different' }]), /Conflicting/);
 });
 
+test('real Hunan and Guizhou schedule edits discard only zero-duration rows and report them by date', async () => {
+  const cases = JSON.parse(await readFile(new URL('./fixtures/zero-duration-programmes.json', import.meta.url)));
+  const directory = await mkdtemp(join(tmpdir(), 'autoepg-zero-duration-'));
+  try {
+    const data = await collect({
+      channels: async () => cases.map(c => ({ ...channel, id: c.pid, pid: c.pid, dates: [c.date] })),
+      programmes: async c => cases.find(f => f.pid === c.pid).rows,
+    }, { ...options, today: '2026-09-15', pastDays: 1, minTodayCoverage: 0.5 });
+    assert.equal(data.programmes.length, 4);
+    assert.equal(data.manifest.discardedProgrammes.length, 2);
+    for (const fixture of cases) {
+      const kept = data.programmes.filter(p => p.channel === fixture.pid);
+      assert.deepEqual(kept, fixture.rows.filter(r => r.et > r.st).map(r =>
+        ({ channel: fixture.pid, title: r.name, start: r.st, stop: r.et })));
+      const discarded = data.manifest.discardedProgrammes.find(p => p.programId === fixture.discardedId);
+      assert.equal(discarded.reason, 'zero-duration');
+      assert.equal(discarded.start, discarded.stop);
+    }
+    await writeArtifacts(directory, data);
+    for (const fixture of cases) {
+      const manifest = JSON.parse(await readFile(join(directory, fixture.date, 'manifest.json')));
+      assert.deepEqual(manifest.discardedProgrammes.map(p => p.programId), [fixture.discardedId]);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('zero-duration rows never manufacture airtime or count toward coverage', async () => {
+  const zero = { ...row(), et: row().st };
+  assert.deepEqual(normalize([zero], channel, today), []);
+  await assert.rejects(collect(source([zero]), options), /No programmes/);
+  await assert.rejects(collect({
+    channels: async () => [channel, { ...channel, id: 'empty', pid: '456' }],
+    programmes: async c => c.id === 'empty' ? [zero] : [row()],
+  }, options), /coverage/);
+  for (const bad of [{ ...zero, et: zero.st - 1 }, { ...zero, name: '' },
+    { ...zero, st: zero.st * 1000, et: zero.st * 1000 }]) {
+    assert.throws(() => normalize([bad], channel, today), /Invalid programme/);
+  }
+});
+
+test('discarding an empty interval does not hide conflicting positive-duration programmes', async () => {
+  await assert.rejects(collect(source([row('A'), { ...row(), et: row().st }, row('B')]), options), /Conflicting/);
+});
+
 test('XML is valid, escapes text/attributes, removes illegal characters, and orders channels first', () => {
   const [p] = normalize([row('新闻 & <天气>\u0000 😀')], channel, today);
   const xml = renderXml([channel], [p]);

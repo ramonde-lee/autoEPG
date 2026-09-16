@@ -27,16 +27,23 @@ export function cleanText(value) {
   return String(value).replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '').trim();
 }
 
-export function normalize(rows, channel, date) {
+export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
   const midnight = windowFor(date, 0, 0).start;
-  return rows.map(row => {
+  return rows.flatMap(row => {
     const start = row.st, stop = row.et;
     const title = cleanText(row.name ?? '');
     if (!title || !Number.isSafeInteger(start) || !Number.isSafeInteger(stop) ||
-        start < midnight || start >= midnight + 2 * DAY || stop <= start || stop - start > DAY) {
+        start < midnight || start >= midnight + 2 * DAY || stop < start || stop - start > DAY) {
       throw new Error(`Invalid programme ${channel.pid}/${date}/${row.programId ?? '?'}: title or timestamps`);
     }
-    return { channel: channel.id, title, start, stop };
+    // Schedule edits can leave empty intervals beside their valid replacements.
+    // They contain no airtime; omit them without guessing an end or changing other rows.
+    if (stop === start) {
+      onDiscard({ channel: channel.id, date, programId: row.programId ?? null,
+        title, start, stop, reason: 'zero-duration' });
+      return [];
+    }
+    return [{ channel: channel.id, title, start, stop }];
   });
 }
 
@@ -66,7 +73,7 @@ export async function collect(source, {
   const firstFetch = dateKey(range.start - DAY);
   const tasks = channels.flatMap(channel => channel.dates
     .filter(date => date >= firstFetch && date <= last).map(date => ({ channel, date })));
-  const empty = [], failures = [], programmes = [];
+  const empty = [], failures = [], programmes = [], discarded = [];
   let next = 0, completed = 0;
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
     while (next < tasks.length) {
@@ -77,7 +84,7 @@ export async function collect(source, {
         // The extra day is only a lookback for programmes crossing midnight.
         // Malformed old rows that ended before our window cannot affect this EPG.
         const relevant = date < first ? rows.filter(row => row.et > range.start) : rows;
-        const parsed = normalize(relevant, channel, date);
+        const parsed = normalize(relevant, channel, date, { onDiscard: p => discarded.push(p) });
         if (parsed.length && !parsed.some(p => dateKey(p.start) === date)) {
           throw new Error('Response contains no programmes starting on the requested date');
         }
@@ -109,6 +116,8 @@ export async function collect(source, {
     earliestStart: new Date(result.reduce((min, p) => Math.min(min, p.start), Infinity) * 1000).toISOString(),
     latestStop: new Date(result.reduce((max, p) => Math.max(max, p.stop), -Infinity) * 1000).toISOString(),
     requestCount: tasks.length, emptySchedules: empty.sort((a, b) => a.channel.localeCompare(b.channel) || a.date.localeCompare(b.date)),
+    discardedProgrammes: discarded.sort((a, b) => a.date.localeCompare(b.date) || a.channel.localeCompare(b.channel) ||
+      a.start - b.start || String(a.programId).localeCompare(String(b.programId))),
     missingToday: channels.filter(c => !todayChannels.has(c.id)).map(c => ({ id: c.id, name: c.name })),
   };
   return { channels, programmes: result, manifest };
@@ -157,6 +166,7 @@ export async function writeArtifacts(directory, dataset) {
       earliestStart: new Date(programmes.reduce((min, p) => Math.min(min, p.start), Infinity) * 1000).toISOString(),
       latestStop: new Date(programmes.reduce((max, p) => Math.max(max, p.stop), -Infinity) * 1000).toISOString(),
       emptySchedules: dataset.manifest.emptySchedules.filter(s => s.date === date),
+      discardedProgrammes: (dataset.manifest.discardedProgrammes ?? []).filter(p => dateKey(p.start) === date),
       xmlBytes: xml.length,
     };
     const files = { 'epg.xml': xml };
