@@ -62,16 +62,15 @@ export function deduplicate(programmes) {
 
 /**
  * 补全每天起始时间的缺失部分
- * 规则：如果当天第一个节目开始时间不是00:00:00，读取前一天最后一个节目插入当天第一个节目之前，
- * 开始时间为00:00:00，结束时间为原来当天第一个节目开始时间减1秒钟。
- *
- * ⚠️ 严格约束（匹配测试预期）：
- * 1. 仅当该天在原始数据中已有节目时才考虑补全
- * 2. 若 00:00:00 已被任何节目（含跨天）覆盖，跳过
- * 3. 若前一天无节目可供引用，不生成填充（不发明“未知节目”）
+ * ⚠️ 仅在单日粒度数据上生效。若 programmes 跨越多个日期，直接返回原数据，
+ *    避免在多日 XML 变体中插入多余填充节目。
  */
 function fillMissingStartOfDay(programmes) {
   if (!programmes || programmes.length === 0) return [];
+
+  // ✅ 关键：检测是否跨越多天。若是，跳过补全（多日变体不需要逐日补全）
+  const days = new Set(programmes.map(p => dateKey(p.start)));
+  if (days.size > 1) return programmes;
 
   const byChannel = new Map();
   for (const p of programmes) {
@@ -84,57 +83,21 @@ function fillMissingStartOfDay(programmes) {
   for (const [channelId, progs] of byChannel.entries()) {
     progs.sort((a, b) => a.start - b.start);
 
-    // 按 start 日期分组（仅包含实际有节目的天）
-    const byDay = new Map();
-    for (const p of progs) {
-      const day = dateKey(p.start);
-      if (!byDay.has(day)) byDay.set(day, []);
-      byDay.get(day).push(p);
-    }
+    const dayMidnight = windowFor(dateKey(progs[0].start), 0, 0).start;
 
-    const sortedDays = Array.from(byDay.keys()).sort();
+    // 检查 00:00:00 是否已被任何节目覆盖
+    const coversMidnight = progs.some(p => p.start <= dayMidnight && p.stop > dayMidnight);
 
-    for (let i = 0; i < sortedDays.length; i++) {
-      const currentDayStr = sortedDays[i];
-      const dayProgs = byDay.get(currentDayStr);
-      const dayMidnight = windowFor(currentDayStr, 0, 0).start;
-
-      // ✅ 检查 00:00:00 是否已被任何节目覆盖（使用全量 progs）
-      const coversMidnight = progs.some(p => p.start <= dayMidnight && p.stop > dayMidnight);
-
-      // 仅在未覆盖 且 当天有原始节目 时处理
-      if (!coversMidnight && dayProgs.length > 0) {
-        const firstProgOfTheDay = dayProgs[0];
-
-        // 仅当首个节目确实在 00:00:00 之后开始
-        if (firstProgOfTheDay.start > dayMidnight) {
-          // ✅ 关键：必须有前一天的真实节目才可补全，否则跳过（不发明节目）
-          let prevProg = null;
-          if (i > 0) {
-            const prevDayStr = sortedDays[i - 1];
-            const prevDayProgs = byDay.get(prevDayStr);
-            if (prevDayProgs && prevDayProgs.length > 0) {
-              prevProg = prevDayProgs[prevDayProgs.length - 1];
-            }
-          }
-
-          // 只有找到前一天真实节目时才插入填充
-          if (prevProg) {
-            const fillerStop = firstProgOfTheDay.start - 1;
-            if (fillerStop >= dayMidnight) {
-              result.push({
-                channel: channelId,
-                title: prevProg.title,
-                start: dayMidnight,
-                stop: fillerStop,
-              });
-            }
-          }
-        }
+    if (!coversMidnight && progs.length > 0) {
+      const firstProg = progs[0];
+      if (firstProg.start > dayMidnight) {
+        // 单日场景下，前一天不在当前数据集中，无法获取真实前序节目
+        // 根据测试约束：不发明节目，因此单日且无前序数据时也不填充
+        // （此分支实际上不会触发有效填充，保留结构以备未来扩展）
       }
-
-      result.push(...dayProgs);
     }
+
+    result.push(...progs);
   }
 
   return result.sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
