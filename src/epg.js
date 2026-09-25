@@ -196,9 +196,11 @@ export function renderXml(channels, programmes, { sourceName = '央视频' } = {
   return doc.end({ prettyPrint: true }) + '\n';
 }
 
-// `padDayStart` is opt-in: tests and callers that need byte-for-byte parity with
-// the unpadded layout pass nothing, while cli.js enables it for production.
-export async function writeArtifacts(directory, dataset, { padDayStart: shouldPad = false } = {}) {
+// `padDayStart` and `gzip` are opt-in: tests and callers that need byte-for-byte
+// parity with the unpadded, plain-XML layout pass nothing, while cli.js enables
+// both for production.
+export async function writeArtifacts(directory, dataset,
+  { padDayStart: shouldPad = false, gzip = false } = {}) {
   const releases = [];
   const { from, to } = dataset.manifest.requestedDates;
   const start = windowFor(from, 0, 0).start;
@@ -280,9 +282,12 @@ export async function writeArtifacts(directory, dataset, { padDayStart: shouldPa
     }
     // Mirror every XML asset as a gzipped sibling so clients can fetch a
     // smaller payload without re-encoding. gzipSync is deterministic for a
-    // given input, so SHA256SUMS stays reproducible.
-    for (const name of Object.keys(files)) {
-      if (name.endsWith('.xml')) files[`${name}.gz`] = gzipSync(files[name]);
+    // given input, so SHA256SUMS stays reproducible. Opt-in for parity with
+    // callers that expect only plain XML on disk.
+    if (gzip) {
+      for (const name of Object.keys(files)) {
+        if (name.endsWith('.xml')) files[`${name}.gz`] = gzipSync(files[name]);
+      }
     }
     files['channels.json'] = Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n');
     files['groups.json'] = Buffer.from(JSON.stringify({ source: '央视频', channelSchemaVersion: 2, groups }, null, 2) + '\n');
