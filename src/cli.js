@@ -12,10 +12,11 @@ try {
     'min-channels': { type: 'string', default: '50' },
     'min-today-coverage': { type: 'string', default: '0.9' },
     'pad-day-start': { type: 'boolean', default: true },
+    gzip: { type: 'boolean', default: true },
     help: { type: 'boolean', default: false },
   } });
   if (values.help) {
-    console.log('npm run generate -- [--output dist] [--date YYYY-MM-DD] [--past-days 3] [--future-days 3] [--concurrency 4] [--min-channels 50] [--min-today-coverage 0.9] [--no-pad-day-start]');
+    console.log('npm run generate -- [--output dist] [--date YYYY-MM-DD] [--past-days 3] [--future-days 3] [--concurrency 4] [--min-channels 50] [--min-today-coverage 0.9] [--no-pad-day-start] [--no-gzip]');
   } else {
     const integer = (key, min, max) => {
       const value = Number(values[key]);
@@ -36,7 +37,9 @@ try {
     if (dataset.manifest.discardedProgrammes.length) {
       console.warn(`Skipped ${dataset.manifest.discardedProgrammes.length} zero-duration programme records; details in manifest.json discardedProgrammes`);
     }
-    const index = await writeArtifacts(values.output, dataset, { padDayStart: values['pad-day-start'] });
+    const index = await writeArtifacts(values.output, dataset, {
+      padDayStart: values['pad-day-start'], gzip: values.gzip,
+    });
     console.log(JSON.stringify(index, null, 2));
   }
 } catch (error) {
