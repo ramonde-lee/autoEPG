@@ -48,31 +48,33 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
 }
 
 /**
- * 同一 channel/start 只保留一条：
- * - title 与 stop 完全相同：去重；
- * - stop 不同：保留 stop 更大的那条（更完整的播出区间）；
- * - stop 相同但 title 不同：保留先出现的那条。
- *
- * 不再因为真实数据中的同 start 冲突而抛错，避免单条异常阻断整次发布。
+ * 合并 channel/start/title/stop 完全一致的重复行。
+ * 只合并完全一致的重复项；title 或 stop 不同的行原样保留，
+ * 交由 deduplicate() 做严格冲突检测。
  */
+export function mergeSameSlot(programmes) {
+  const merged = [];
+  for (const programme of programmes) {
+    const duplicate = merged.find(
+      p => p.channel === programme.channel &&
+           p.start === programme.start &&
+           p.title === programme.title &&
+           p.stop === programme.stop
+    );
+    if (!duplicate) merged.push(programme);
+  }
+  return merged;
+}
+
 export function deduplicate(programmes) {
   const unique = new Map();
   for (const programme of programmes) {
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
-    if (!previous) {
-      unique.set(key, programme);
-      continue;
+    if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
+      throw new Error(`Conflicting programmes at ${key}`);
     }
-    if (previous.title === programme.title && previous.stop === programme.stop) {
-      continue;
-    }
-    if (previous.stop !== programme.stop) {
-      // 保留结束更晚的那条
-      if (programme.stop > previous.stop) unique.set(key, programme);
-      continue;
-    }
-    // stop 相同但 title 不同，保留先出现的那条
+    unique.set(key, programme);
   }
   return [...unique.values()].sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
 }
@@ -175,7 +177,10 @@ export async function collect(source, {
   }));
   // Never publish a partial scrape after network/schema failures.
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
-  const result = deduplicate(programmes);
+
+  // 先合并完全一致的重复行，再交给 deduplicate() 做严格冲突检测
+  const merged = mergeSameSlot(programmes);
+  const result = deduplicate(merged);
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
   const todayChannels = new Set(result.filter(p => dateKey(p.start) === today).map(p => p.channel));
   const coverage = todayChannels.size / channels.length;
