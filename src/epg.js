@@ -99,15 +99,18 @@ function fillMissingStartOfDay(programmes) {
       const currentDayStr = sortedDays[i];
       const dayProgs = byDay.get(currentDayStr);
       
+      // 安全检查：如果某天没有节目（理论上不会发生，因为我们是根据节目构建 byDay 的）
+      if (!dayProgs || dayProgs.length === 0) continue;
+
       // 计算当天的 00:00:00 时间戳 (UTC+8)
       const dayMidnight = windowFor(currentDayStr, 0, 0).start;
       
       // 找到当天实际上最早开始的节目
-      // 注意：dayProgs 已经按时间排序，所以第一个就是最早的
       const firstProgOfTheDay = dayProgs[0];
 
       // 检查是否从 00:00:00 开始
-      if (firstProgOfTheDay.start !== dayMidnight) {
+      // 允许 1 秒的误差，以防时间戳计算中的舍入问题
+      if (Math.abs(firstProgOfTheDay.start - dayMidnight) > 1) {
         let fillerTitle = "未知节目";
         
         // 尝试查找前一天的最后一个节目
@@ -160,21 +163,23 @@ export async function collect(source, {
   // 准备任务列表 - 增加健壮性检查
   const tasks = [];
   for (const channel of channels) {
-    // 安全地获取 dates 数组
-    let dates = [];
+    let datesToFetch = [];
+    
+    // 策略 1: 如果 channel.dates 存在且是数组，使用它
     if (Array.isArray(channel.dates)) {
-      dates = channel.dates;
-    } else if (channel.dates && typeof channel.dates === 'object') {
-      // 如果 dates 是一个对象，尝试从中提取值
-      dates = Object.values(channel.dates).flat();
+      datesToFetch = channel.dates.filter(date => date >= firstFetch && date <= last);
+    } 
+    // 策略 2: 如果 channel.dates 不存在，动态生成默认日期范围
+    else {
+      const startDay = new Date(range.start * 1000);
+      const endDay = new Date((range.stop - 1) * 1000);
+      
+      for (let d = new Date(startDay); d <= endDay; d.setDate(d.getDate() + 1)) {
+        datesToFetch.push(dateKey(d.getTime() / 1000));
+      }
     }
     
-    // 过滤出相关日期
-    const relevantDates = dates.filter(date => date >= firstFetch && date <= last);
-    
-    // 如果没有相关日期，但频道存在，我们可以选择跳过或添加一个默认任务
-    // 这里选择跳过，避免无效请求
-    for (const date of relevantDates) {
+    for (const date of datesToFetch) {
       tasks.push({ channel, date });
     }
   }
@@ -183,7 +188,7 @@ export async function collect(source, {
   let next = 0, completed = 0;
   
   if (tasks.length === 0) {
-      throw new Error('No tasks generated. Check channel dates configuration.');
+      throw new Error('No tasks generated. Check channel dates configuration or date range.');
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
@@ -200,8 +205,6 @@ export async function collect(source, {
         const parsed = normalize(relevant, channel, date, { onDiscard: p => discarded.push(p) });
         
         // 验证逻辑：如果请求的是范围内的日期，且解析后有数据，但没有任何数据是从该日期开始的，则报错
-        // 注意：cross-midnight 的节目 start 在前一天，所以如果某天只有 cross-midnight 节目，parsed 里就没有 start === date 的
-        // 原代码逻辑如此，我们保留，但需注意这可能导致某些合法情况报错。
         if (parsed.length && date >= first && date <= last && !parsed.some(p => dateKey(p.start) === date)) {
            throw new Error('Response contains no programmes starting on the requested date');
         }
