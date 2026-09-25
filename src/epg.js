@@ -60,13 +60,15 @@ export function deduplicate(programmes) {
   return [...unique.values()].sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
 }
 
-// Find the last programme on a channel that ends at or before `day` (midnight).
-// Programmes that cross into `day` are intentionally excluded: they already
-// cover the start of the day, so no padding is needed for them.
+// Find the last programme on a channel that ends within the day before `day`.
+// Only programmes ending in [day - DAY, day] qualify: an older programme is not
+// the "previous day's last programme", and a programme that crosses into `day`
+// already covers 00:00:00, so no padding is needed for it.
 export function findPreviousProgramme(programmes, channelId, day) {
   let best = null;
   for (const p of programmes) {
-    if (p.channel !== channelId || p.stop > day) continue;
+    if (p.channel !== channelId) continue;
+    if (p.stop > day || p.stop <= day - DAY) continue;
     if (!best || p.stop > best.stop) best = p;
   }
   return best;
@@ -92,7 +94,7 @@ export function padDayStart(programmes, allProgrammes, day, { onPad = () => {} }
     const first = list[0];
     if (first.start <= day) continue; // already covers 00:00:00
     const prev = findPreviousProgramme(allProgrammes, channelId, day);
-    if (!prev) continue; // no previous programme to borrow a title from
+    if (!prev) continue; // no previous-day programme to borrow a title from
     const start = day;
     const stop = first.start - 1;
     if (stop < start) continue; // no room for a 1-second filler
