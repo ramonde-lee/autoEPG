@@ -1,6 +1,8 @@
 # autoEPG
 
-自动获取[央视频电视页](https://www.yangshipin.cn/tv/home)节目单，每日生成标准 **XMLTV EPG**，按日期发布到 GitHub Releases。无需服务器、央视频账号或个人访问令牌。
+**自动获取[央视频电视页](https://www.yangshipin.cn/tv/home)节目单，每日生成标准 **XMLTV EPG**，按日期发布到 GitHub Releases。无需服务器、央视频账号或个人访问令牌。**
+
+**跨午夜节目自动在次日增加第一条节目单无缝衔接。**
 
 ## 当天订阅
 
