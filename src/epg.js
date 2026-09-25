@@ -201,16 +201,24 @@ export async function writeArtifacts(directory, dataset) {
   const start = windowFor(from, 0, 0).start;
   const stop = windowFor(to, 0, 0).stop;
 
-  // Build a window's programmes, padding the start of the first day to 00:00.
-  // `windowStart` must be a midnight epoch second; `days` is the window length.
-  // `channelFilter`, when provided, restricts to a set of channel ids.
+  // Build a window's programmes, padding the start of every day in the window
+  // to 00:00. `windowStart` must be a midnight epoch second; `days` is the
+  // window length. `channelFilter`, when provided, restricts to a set of ids.
   const paddedProgrammes = [];
   const buildWindow = (windowStart, days, channelFilter = null) => {
     const end = windowStart + days * DAY;
-    const raw = dataset.programmes.filter(p =>
+    let result = dataset.programmes.filter(p =>
       p.start < end && p.stop > windowStart &&
       (!channelFilter || channelFilter.has(p.channel)));
-    return padDayStart(raw, dataset.programmes, windowStart, { onPad: p => paddedProgrammes.push(p) });
+    for (let day = windowStart; day < end; day += DAY) {
+      const dayEnd = day + DAY;
+      const daySlice = result.filter(p =>
+        p.start >= day && p.start < dayEnd &&
+        (!channelFilter || channelFilter.has(p.channel)));
+      if (!daySlice.length) continue;
+      result = padDayStart(result, dataset.programmes, day, { onPad: p => paddedProgrammes.push(p) });
+    }
+    return result;
   };
 
   for (let day = start; day < stop; day += DAY) {
