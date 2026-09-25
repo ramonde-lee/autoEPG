@@ -201,24 +201,28 @@ export async function writeArtifacts(directory, dataset) {
   const start = windowFor(from, 0, 0).start;
   const stop = windowFor(to, 0, 0).stop;
 
-  // Build a window's programmes, padding the start of every day in the window
-  // to 00:00. `windowStart` must be a midnight epoch second; `days` is the
-  // window length. `channelFilter`, when provided, restricts to a set of ids.
+  // Pad every day in the requested range once, up front. This keeps 1/2/3-day
+  // variants and group feeds consistent: they all filter the same padded set,
+  // and each day/channel gets exactly one filler programme.
   const paddedProgrammes = [];
+  const padded = [];
+  for (let day = start; day < stop; day += DAY) {
+    const dayEnd = day + DAY;
+    const daySlice = dataset.programmes.filter(p => p.start >= day && p.start < dayEnd);
+    if (!daySlice.length) continue;
+    const withPad = padDayStart(daySlice, dataset.programmes, day, { onPad: p => paddedProgrammes.push(p) });
+    for (const p of withPad) if (p.padded) padded.push(p);
+  }
+  const allProgrammes = [...dataset.programmes, ...padded];
+
+  // Build a window's programmes from the padded set.
+  // `windowStart` must be a midnight epoch second; `days` is the window length.
+  // `channelFilter`, when provided, restricts to a set of channel ids.
   const buildWindow = (windowStart, days, channelFilter = null) => {
     const end = windowStart + days * DAY;
-    let result = dataset.programmes.filter(p =>
+    return allProgrammes.filter(p =>
       p.start < end && p.stop > windowStart &&
       (!channelFilter || channelFilter.has(p.channel)));
-    for (let day = windowStart; day < end; day += DAY) {
-      const dayEnd = day + DAY;
-      const daySlice = result.filter(p =>
-        p.start >= day && p.start < dayEnd &&
-        (!channelFilter || channelFilter.has(p.channel)));
-      if (!daySlice.length) continue;
-      result = padDayStart(result, dataset.programmes, day, { onPad: p => paddedProgrammes.push(p) });
-    }
-    return result;
   };
 
   for (let day = start; day < stop; day += DAY) {
