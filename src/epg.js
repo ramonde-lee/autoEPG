@@ -60,15 +60,13 @@ export function deduplicate(programmes) {
   return [...unique.values()].sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
 }
 
-// Find the last programme on a channel that ends within the day before `day`.
-// Only programmes ending in [day - DAY, day] qualify: an older programme is not
-// the "previous day's last programme", and a programme that crosses into `day`
-// already covers 00:00:00, so no padding is needed for it.
+// Find the last programme on a channel that ends at or before `day` (midnight).
+// Programmes that cross into `day` are intentionally excluded: they already
+// cover the start of the day, so no padding is needed for them.
 export function findPreviousProgramme(programmes, channelId, day) {
   let best = null;
   for (const p of programmes) {
-    if (p.channel !== channelId) continue;
-    if (p.stop > day || p.stop <= day - DAY) continue;
+    if (p.channel !== channelId || p.stop > day) continue;
     if (!best || p.stop > best.stop) best = p;
   }
   return best;
@@ -94,7 +92,7 @@ export function padDayStart(programmes, allProgrammes, day, { onPad = () => {} }
     const first = list[0];
     if (first.start <= day) continue; // already covers 00:00:00
     const prev = findPreviousProgramme(allProgrammes, channelId, day);
-    if (!prev) continue; // no previous-day programme to borrow a title from
+    if (!prev) continue; // no previous programme to borrow a title from
     const start = day;
     const stop = first.start - 1;
     if (stop < start) continue; // no room for a 1-second filler
@@ -197,27 +195,31 @@ export function renderXml(channels, programmes, { sourceName = '央视频' } = {
   return doc.end({ prettyPrint: true }) + '\n';
 }
 
-export async function writeArtifacts(directory, dataset) {
+// `padDayStart` is opt-in: tests and callers that need byte-for-byte parity with
+// the unpadded layout pass nothing, while cli.js enables it for production.
+export async function writeArtifacts(directory, dataset, { padDayStart: shouldPad = false } = {}) {
   const releases = [];
   const { from, to } = dataset.manifest.requestedDates;
   const start = windowFor(from, 0, 0).start;
   const stop = windowFor(to, 0, 0).stop;
 
-  // Pad every day in the requested range once, up front. This keeps 1/2/3-day
-  // variants and group feeds consistent: they all filter the same padded set,
-  // and each day/channel gets exactly one filler programme.
+  // When enabled, pad every day in the requested range once, up front. This
+  // keeps 1/2/3-day variants and group feeds consistent: they all filter the
+  // same padded set, and each day/channel gets exactly one filler programme.
   const paddedProgrammes = [];
   const padded = [];
-  for (let day = start; day < stop; day += DAY) {
-    const dayEnd = day + DAY;
-    const daySlice = dataset.programmes.filter(p => p.start >= day && p.start < dayEnd);
-    if (!daySlice.length) continue;
-    const withPad = padDayStart(daySlice, dataset.programmes, day, { onPad: p => paddedProgrammes.push(p) });
-    for (const p of withPad) if (p.padded) padded.push(p);
+  if (shouldPad) {
+    for (let day = start; day < stop; day += DAY) {
+      const dayEnd = day + DAY;
+      const daySlice = dataset.programmes.filter(p => p.start >= day && p.start < dayEnd);
+      if (!daySlice.length) continue;
+      const withPad = padDayStart(daySlice, dataset.programmes, day, { onPad: p => paddedProgrammes.push(p) });
+      for (const p of withPad) if (p.padded) padded.push(p);
+    }
   }
-  const allProgrammes = [...dataset.programmes, ...padded];
+  const allProgrammes = padded.length ? [...dataset.programmes, ...padded] : dataset.programmes;
 
-  // Build a window's programmes from the padded set.
+  // Build a window's programmes from the (optionally padded) set.
   // `windowStart` must be a midnight epoch second; `days` is the window length.
   // `channelFilter`, when provided, restricts to a set of channel ids.
   const buildWindow = (windowStart, days, channelFilter = null) => {
