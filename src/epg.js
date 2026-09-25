@@ -47,15 +47,32 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
   });
 }
 
+/**
+ * 同一 channel/start 只保留一条：
+ * - title 与 stop 完全相同：去重；
+ * - stop 不同：保留 stop 更大的那条（更完整的播出区间）；
+ * - stop 相同但 title 不同：保留先出现的那条。
+ *
+ * 不再因为真实数据中的同 start 冲突而抛错，避免单条异常阻断整次发布。
+ */
 export function deduplicate(programmes) {
   const unique = new Map();
   for (const programme of programmes) {
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
-    if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
-      throw new Error(`Conflicting programmes at ${key}`);
+    if (!previous) {
+      unique.set(key, programme);
+      continue;
     }
-    unique.set(key, programme);
+    if (previous.title === programme.title && previous.stop === programme.stop) {
+      continue;
+    }
+    if (previous.stop !== programme.stop) {
+      // 保留结束更晚的那条
+      if (programme.stop > previous.stop) unique.set(key, programme);
+      continue;
+    }
+    // stop 相同但 title 不同，保留先出现的那条
   }
   return [...unique.values()].sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
 }
@@ -68,8 +85,7 @@ export function deduplicate(programmes) {
  *   title = 前一天最后一个节目的标题
  *
  * 不修改入参数组，返回补齐后的新数组。
- * 如果补出来的节目与已有节目在 channel/start 上冲突，保留已有节目，丢弃补出来的那条，
- * 避免把冲突带进后续流程。
+ * 如果补出来的节目与已有节目在 channel/start 上冲突，保留已有节目，丢弃补出来的那条。
  */
 export function padDayStart(channels, programmes, date) {
   const midnight = windowFor(date, 0, 0).start;
@@ -90,7 +106,6 @@ export function padDayStart(channels, programmes, date) {
   for (const [channel, list] of byChannel) {
     const sorted = [...list].sort((a, b) => a.start - b.start);
 
-    // 当天已经存在 00:00:00 的节目，跳过，避免冲突
     if (sorted.some(p => p.start === midnight)) continue;
     if (existing.has(`${channel}/${midnight}`)) continue;
 
