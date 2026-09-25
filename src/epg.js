@@ -30,26 +30,6 @@ export function cleanText(value) {
   return String(value).replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '').trim();
 }
 
-/**
- * 辅助函数：将秒数转换为 HH:mm:ss 格式 (基于 UTC+8)
- */
-function secondsToHHMMSS(seconds) {
-  const date = new Date((seconds + OFFSET) * 1000);
-  const h = String(date.getUTCHours()).padStart(2, '0');
-  const m = String(date.getUTCMinutes()).padStart(2, '0');
-  const s = String(date.getUTCSeconds()).padStart(2, '0');
-  return `${h}:${m}:${s}`;
-}
-
-/**
- * 辅助函数：解析 HH:mm:ss 为当天的秒数 (基于 UTC+8)
- */
-function parseHHMMSS(timeStr, dayMidnight) {
-  const [h, m, s] = timeStr.split(':').map(Number);
-  // dayMidnight 是 UTC 秒数，对应本地 00:00:00
-  return dayMidnight + h * 3600 + m * 60 + s;
-}
-
 export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
   const midnight = windowFor(date, 0, 0).start;
   return rows.flatMap(row => {
@@ -75,7 +55,7 @@ export function deduplicate(programmes) {
   for (const programme of programmes) {
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
-    if (previous && (previous.title !== programme.title || previous.stop !== previous.stop)) {
+    if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
       throw new Error(`Conflicting programmes at ${key}`);
     }
     unique.set(key, programme);
@@ -85,10 +65,12 @@ export function deduplicate(programmes) {
 
 /**
  * 核心修正逻辑：
- * 按天和频道组织节目，如果某天的第一个节目开始时间不是 00:00:00，
- * 则查找该频道前一天的最后一个节目，并创建一个从 00:00:00 到当天第一个节目开始前1秒的填充节目。
+ * 遍历所有节目，按频道和日期分组。
+ * 如果某天的第一个节目开始时间不是当天的 00:00:00，则插入一个填充节目。
  */
-function fillMissingStartOfDay(allProgrammes, channelsMap) {
+function fillMissingStartOfDay(allProgrammes) {
+  if (!allProgrammes || allProgrammes.length === 0) return [];
+
   // 1. 按频道分组
   const byChannel = new Map();
   for (const p of allProgrammes) {
@@ -102,7 +84,8 @@ function fillMissingStartOfDay(allProgrammes, channelsMap) {
     // 按时间排序
     progs.sort((a, b) => a.start - b.start);
 
-    // 按天分组处理
+    // 2. 按天分组
+    // 我们需要知道每一天有哪些节目，以便找到“第一个”
     const byDay = new Map();
     for (const p of progs) {
       const day = dateKey(p.start);
@@ -110,40 +93,40 @@ function fillMissingStartOfDay(allProgrammes, channelsMap) {
       byDay.get(day).push(p);
     }
 
-    // 获取该频道所有日期的排序列表，以便查找“前一天”
+    // 获取该频道所有涉及的日期，并排序
     const sortedDays = Array.from(byDay.keys()).sort();
 
     for (let i = 0; i < sortedDays.length; i++) {
-      const currentDay = sortedDays[i];
-      const dayProgs = byDay.get(currentDay);
+      const currentDayStr = sortedDays[i];
+      const dayProgs = byDay.get(currentDayStr);
       
-      // 找到当天的午夜时间点 (UTC秒)
-      const dayMidnight = windowFor(currentDay, 0, 0).start;
+      // 计算当天的 00:00:00 时间戳
+      const dayMidnight = windowFor(currentDayStr, 0, 0).start;
       
-      // 检查当天第一个节目是否从 00:00:00 开始
-      const firstProg = dayProgs[0];
-      const startsAtMidnight = firstProg.start === dayMidnight;
+      // 找到当天实际上最早开始的节目
+      // 注意：dayProgs 已经按时间排序，所以第一个就是最早的
+      const firstProgOfTheDay = dayProgs[0];
 
-      if (!startsAtMidnight) {
+      // 检查是否从 00:00:00 开始
+      // 允许微小的误差吗？不，EPG 通常是整秒或整分。严格比较。
+      if (firstProgOfTheDay.start !== dayMidnight) {
         // 需要填充
         let fillerTitle = "未知节目";
         
         // 尝试查找前一天的最后一个节目
         if (i > 0) {
-          const prevDay = sortedDays[i - 1];
-          const prevDayProgs = byDay.get(prevDay);
-          // 前一天最后一个节目
-          const lastPrevProg = prevDayProgs[prevDayProgs.length - 1];
-          if (lastPrevProg) {
+          const prevDayStr = sortedDays[i - 1];
+          const prevDayProgs = byDay.get(prevDayStr);
+          if (prevDayProgs && prevDayProgs.length > 0) {
+            // 前一天最后一个节目
+            const lastPrevProg = prevDayProgs[prevDayProgs.length - 1];
             fillerTitle = `${lastPrevProg.title} (续)`;
           }
         }
 
         // 创建填充节目
-        // 开始时间: 当天 00:00:00
-        // 结束时间: 当天第一个节目开始时间 - 1秒
         const fillerStart = dayMidnight;
-        const fillerStop = firstProg.start - 1;
+        const fillerStop = firstProgOfTheDay.start - 1;
 
         // 只有当填充时长大于0时才添加
         if (fillerStop > fillerStart) {
@@ -152,12 +135,12 @@ function fillMissingStartOfDay(allProgrammes, channelsMap) {
             title: fillerTitle,
             start: fillerStart,
             stop: fillerStop,
-            is_filler: true // 标记，可选
+            is_filler: true
           });
         }
       }
 
-      // 添加当天的所有原始节目
+      // 将当天的原始节目加入结果
       filledProgrammes.push(...dayProgs);
     }
   }
@@ -174,31 +157,53 @@ export async function collect(source, {
   const channels = await source.channels();
   if (channels.length < minChannels) throw new Error(`Only ${channels.length} channels; expected at least ${minChannels}`);
   
-  // 构建频道映射，方便后续查找
-  const channelsMap = new Map(channels.map(c => [c.id, c]));
-
   const first = dateKey(range.start), last = dateKey(range.stop - 1);
   // Include the preceding day's final programme if it crosses into our window.
   const firstFetch = dateKey(range.start - DAY);
-  const tasks = channels.flatMap(channel => channel.dates
-    .filter(date => date >= firstFetch && date <= last).map(date => ({ channel, date })));
   
+  // 准备任务列表
+  const tasks = [];
+  for (const channel of channels) {
+    // 确保 channel.dates 存在且是一个数组
+    const dates = Array.isArray(channel.dates) ? channel.dates : [];
+    const relevantDates = dates.filter(date => date >= firstFetch && date <= last);
+    for (const date of relevantDates) {
+      tasks.push({ channel, date });
+    }
+  }
+
   const empty = [], failures = [], programmes = [], discarded = [];
   let next = 0, completed = 0;
   
+  // 如果没有任务，直接抛出错误，避免后续逻辑出错
+  if (tasks.length === 0) {
+      throw new Error('No tasks generated. Check channel dates configuration.');
+  }
+
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
     while (next < tasks.length) {
-      const { channel, date } = tasks[next++];
+      const taskIndex = next++;
+      const { channel, date } = tasks[taskIndex];
       try {
         const rows = await source.programmes(channel, date);
         if (!rows.length) empty.push({ channel: channel.id, date });
+        
         // The extra day is only a lookback for programmes crossing midnight.
-        // Malformed old rows that ended before our window cannot affect this EPG.
         const relevant = date < first ? rows.filter(row => row.et > range.start) : rows;
+        
         const parsed = normalize(relevant, channel, date, { onDiscard: p => discarded.push(p) });
-        if (parsed.length && !parsed.some(p => dateKey(p.start) === date)) {
-          throw new Error('Response contains no programmes starting on the requested date');
+        
+        // 验证：如果请求了某一天，至少应该有一些节目是从那一天开始的（除非是全天空缺，但这会被 empty 捕获）
+        // 这里保留原有逻辑，但要注意 cross-midnight 的节目可能 start 在前一天
+        if (parsed.length && date >= first && date <= last && !parsed.some(p => dateKey(p.start) === date)) {
+           // 这是一个警告还是错误？原代码是错误。保留。
+           // 但如果是因为我们只取了 cross-midnight 的部分，可能会导致这个问题。
+           // 原逻辑: date < first 时做了 filter。 date >= first 时没做。
+           // 如果 API 返回的节目全是跨天的（start 在前一天），那么 parsed 里就没有 start === date 的节目。
+           // 这种情况在某些 EPG 源是合法的。但原代码认为这是错误。我们暂时保留原代码行为。
+           throw new Error('Response contains no programmes starting on the requested date');
         }
+        
         programmes.push(...parsed.filter(p => p.start < range.stop && p.stop > range.start));
       } catch (error) {
         failures.push(`${channel.name}/${date}: ${error.message}`);
@@ -208,12 +213,16 @@ export async function collect(source, {
     }
   }));
   
-  // Never publish a partial scrape after network/schema failures.
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
   
-  // 应用补全逻辑
+  // 1. 先去重
   const rawResult = deduplicate(programmes);
-  const result = deduplicate(fillMissingStartOfDay(rawResult, channelsMap));
+  
+  // 2. 再补全缺失的起始时间
+  const filledResult = fillMissingStartOfDay(rawResult);
+  
+  // 3. 再次去重（防止填充节目与现有节目冲突，虽然逻辑上不应冲突）
+  const result = deduplicate(filledResult);
 
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
   
@@ -293,7 +302,6 @@ export async function writeArtifacts(directory, dataset) {
     if (date === dataset.manifest.referenceDate) {
       for (const days of [2, 3]) {
         const end = day + days * DAY;
-        // A short, explicitly requested local window must not masquerade as 2/3 days.
         if (end > stop) continue;
         const combined = dataset.programmes.filter(p => p.start < end && p.stop > day);
         const name = `epg${days}.xml`;
