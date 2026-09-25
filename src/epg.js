@@ -67,8 +67,9 @@ export function deduplicate(programmes) {
  *   stop  = 当天第一个节目.start - 1
  *   title = 前一天最后一个节目的标题
  *
- * 不修改入参数组，返回补齐后的新数组。只影响 XML 输出，
- * 不影响 dataset.programmes、manifest 计数或任何测试断言。
+ * 不修改入参数组，返回补齐后的新数组。
+ * 如果补出来的节目与已有节目在 channel/start 上冲突，保留已有节目，丢弃补出来的那条，
+ * 避免把冲突带进后续流程。
  */
 export function padDayStart(channels, programmes, date) {
   const midnight = windowFor(date, 0, 0).start;
@@ -83,6 +84,7 @@ export function padDayStart(channels, programmes, date) {
     byChannel.get(p.channel).push(p);
   }
 
+  const existing = new Set(programmes.map(p => `${p.channel}/${p.start}`));
   const padded = [...programmes];
 
   for (const [channel, list] of byChannel) {
@@ -90,6 +92,7 @@ export function padDayStart(channels, programmes, date) {
 
     // 当天已经存在 00:00:00 的节目，跳过，避免冲突
     if (sorted.some(p => p.start === midnight)) continue;
+    if (existing.has(`${channel}/${midnight}`)) continue;
 
     const todayFirst = sorted.find(p => p.start >= midnight && p.start < midnight + DAY);
     if (!todayFirst) continue;
@@ -104,12 +107,16 @@ export function padDayStart(channels, programmes, date) {
     const stop = todayFirst.start - 1;
     if (stop < midnight) continue;
 
+    const key = `${channel}/${midnight}`;
+    if (existing.has(key)) continue;
+
     padded.push({
       channel,
       title: previousLast.title,
       start: midnight,
       stop,
     });
+    existing.add(key);
   }
 
   return padded;
