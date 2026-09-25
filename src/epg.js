@@ -64,11 +64,14 @@ export function deduplicate(programmes) {
  * 补全每天起始时间的缺失部分
  * 规则：如果当天第一个节目开始时间不是00:00:00，读取前一天最后一个节目插入当天第一个节目之前，
  * 开始时间为00:00:00，结束时间为原来当天第一个节目开始时间减1秒钟。
+ * 
+ * ⚠️ 关键约束：
+ * 1. 仅当该天已有原始节目时才触发补全（不为空日程发明节目）
+ * 2. 若 00:00:00 已被跨天节目覆盖，则跳过补全
  */
 function fillMissingStartOfDay(programmes) {
   if (!programmes || programmes.length === 0) return [];
 
-  // 1. 按频道分组
   const byChannel = new Map();
   for (const p of programmes) {
     if (!byChannel.has(p.channel)) byChannel.set(p.channel, []);
@@ -78,10 +81,9 @@ function fillMissingStartOfDay(programmes) {
   const result = [];
 
   for (const [channelId, progs] of byChannel.entries()) {
-    // 确保按时间排序
     progs.sort((a, b) => a.start - b.start);
 
-    // 2. 按天分组 (基于节目的 start 时间)
+    // 仅基于实际存在节目的日期进行分组
     const byDay = new Map();
     for (const p of progs) {
       const day = dateKey(p.start);
@@ -89,55 +91,46 @@ function fillMissingStartOfDay(programmes) {
       byDay.get(day).push(p);
     }
 
-    // 获取该频道所有涉及的日期，并排序
     const sortedDays = Array.from(byDay.keys()).sort();
-    if (sortedDays.length === 0) continue;
 
     for (let i = 0; i < sortedDays.length; i++) {
       const currentDayStr = sortedDays[i];
       const dayProgs = byDay.get(currentDayStr);
-      if (!dayProgs || dayProgs.length === 0) continue;
-
-      // 计算当天的 00:00:00 时间戳 (UTC+8)
       const dayMidnight = windowFor(currentDayStr, 0, 0).start;
-      
-      // 找到当天实际上最早开始的节目
-      const firstProgOfTheDay = dayProgs[0];
 
-      // 3. 如果当天第一个节目开始时间不是 00:00:00 (严格大于 midnight)
-      if (firstProgOfTheDay.start > dayMidnight) {
-        let prevProg = null;
-        
-        // 4. 读取前一天最后一个节目
-        if (i > 0) {
-          const prevDayStr = sortedDays[i - 1];
-          const prevDayProgs = byDay.get(prevDayStr);
-          if (prevDayProgs && prevDayProgs.length > 0) {
-            prevProg = prevDayProgs[prevDayProgs.length - 1];
+      // ✅ 关键检查：00:00:00 是否已被任何节目（含跨天节目）覆盖
+      const coversMidnight = progs.some(p => p.start <= dayMidnight && p.stop > dayMidnight);
+
+      if (!coversMidnight && dayProgs.length > 0) {
+        const firstProgOfTheDay = dayProgs[0];
+
+        // 仅当当天首个节目确实在 00:00:00 之后开始时才填充
+        if (firstProgOfTheDay.start > dayMidnight) {
+          let prevProg = null;
+          if (i > 0) {
+            const prevDayStr = sortedDays[i - 1];
+            const prevDayProgs = byDay.get(prevDayStr);
+            if (prevDayProgs && prevDayProgs.length > 0) {
+              prevProg = prevDayProgs[prevDayProgs.length - 1];
+            }
           }
-        }
 
-        const fillerStart = dayMidnight;
-        // 5. 结束时间为原来当天第一个节目开始时间减1秒钟
-        const fillerStop = firstProgOfTheDay.start - 1;
-
-        // 只有当填充时长大于等于0时才插入
-        if (fillerStop >= fillerStart) {
-          result.push({
-            channel: channelId,
-            title: prevProg ? prevProg.title : "未知节目", // 若前一天无数据则使用默认标题
-            start: fillerStart,
-            stop: fillerStop,
-          });
+          const fillerStop = firstProgOfTheDay.start - 1;
+          if (fillerStop >= dayMidnight) {
+            result.push({
+              channel: channelId,
+              title: prevProg ? prevProg.title : "未知节目",
+              start: dayMidnight,
+              stop: fillerStop,
+            });
+          }
         }
       }
 
-      // 将当天的原始节目加入结果
       result.push(...dayProgs);
     }
   }
 
-  // 返回前再次排序，确保填充节目位于正确位置
   return result.sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
 }
 
@@ -188,13 +181,8 @@ export async function collect(source, {
   
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
   
-  // 1. 先去重
   const rawResult = deduplicate(programmes);
-  
-  // 2. 补全缺失的起始时间 (严格按新要求逻辑)
   const filledResult = fillMissingStartOfDay(rawResult);
-  
-  // 3. 再次去重（防止填充节目与现有节目冲突）
   const result = deduplicate(filledResult);
 
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
