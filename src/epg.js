@@ -12,9 +12,11 @@ const OFFSET = 8 * 3600;
 export function dateKey(seconds) {
   return new Date((seconds + OFFSET) * 1000).toISOString().slice(0, 10);
 }
+
 export function xmltvTime(seconds) {
   return new Date((seconds + OFFSET) * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, '') + ' +0800';
 }
+
 export function windowFor(today, pastDays, futureDays) {
   const midnight = Date.parse(`${today}T00:00:00+08:00`) / 1000;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || !Number.isFinite(midnight) || dateKey(midnight) !== today) {
@@ -22,8 +24,8 @@ export function windowFor(today, pastDays, futureDays) {
   }
   return { start: midnight - pastDays * DAY, stop: midnight + (futureDays + 1) * DAY };
 }
+
 export function cleanText(value) {
-  // XML 1.0 permits tabs, CR/LF, and these Unicode ranges only.
   return String(value).replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '').trim();
 }
 
@@ -36,8 +38,6 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
         start < midnight || start >= midnight + 2 * DAY || stop < start || stop - start > DAY) {
       throw new Error(`Invalid programme ${channel.pid}/${date}/${row.programId ?? '?'}: title or timestamps`);
     }
-    // Schedule edits can leave empty intervals beside their valid replacements.
-    // They contain no airtime; omit them without guessing an end or changing other rows.
     if (stop === start) {
       onDiscard({ channel: channel.id, date, programId: row.programId ?? null,
         title, start, stop, reason: 'zero-duration' });
@@ -50,12 +50,14 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
 export function deduplicate(programmes) {
   const unique = new Map();
   for (const programme of programmes) {
-    if (!programme || typeof programme.channel !== 'string') continue;
-    if (!Number.isSafeInteger(programme.start) || !Number.isSafeInteger(programme.stop)) continue;
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
-    if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
-      throw new Error(`Conflicting programmes at ${key}`);
+    if (previous) {
+      // 如果完全相同，跳过；如果不同，报错
+      if (previous.title === programme.title && previous.stop === programme.stop) {
+        continue;
+      }
+      throw new Error(`Conflicting programmes at ${key}: [${previous.title}] vs [${programme.title}]`);
     }
     unique.set(key, programme);
   }
@@ -63,51 +65,84 @@ export function deduplicate(programmes) {
 }
 
 /**
- * 如果某频道当天首个节目不是 00:00:00，则用前一天最后一个节目的标题，
- * 补一个 [当天 00:00:00, 当天首个节目.start - 1] 的节目。
- * 不修改入参数组，返回新增节目列表。
+ * 补全每天起始时间的缺失部分
+ * 规则：如果当天第一个节目开始时间不是00:00:00，读取前一天最后一个节目插入当天第一个节目之前，
+ * 开始时间为00:00:00，结束时间为原来当天第一个节目开始时间减1秒钟。
  */
-export function fillDayStart(programmes, date) {
-  const midnight = windowFor(date, 0, 0).start;
-  const previousDayStart = midnight - DAY;
+function fillMissingStartOfDay(programmes) {
+  if (!programmes || programmes.length === 0) return [];
+
+  // 1. 按频道分组
   const byChannel = new Map();
-
-  for (const programme of programmes) {
-    if (!programme || typeof programme.channel !== 'string') continue;
-    if (!Number.isSafeInteger(programme.start) || !Number.isSafeInteger(programme.stop)) continue;
-    if (typeof programme.title !== 'string' || !programme.title) continue;
-    if (!byChannel.has(programme.channel)) byChannel.set(programme.channel, []);
-    byChannel.get(programme.channel).push(programme);
+  for (const p of programmes) {
+    if (!byChannel.has(p.channel)) byChannel.set(p.channel, []);
+    byChannel.get(p.channel).push(p);
   }
 
-  const filled = [];
+  const result = [];
 
-  for (const [channel, list] of byChannel) {
-    const sorted = [...list].sort((a, b) => a.start - b.start);
+  for (const [channelId, progs] of byChannel.entries()) {
+    // 确保按时间排序
+    progs.sort((a, b) => a.start - b.start);
 
-    const todayFirst = sorted.find(p => p.start >= midnight && p.start < midnight + DAY);
-    if (!todayFirst) continue;
-    if (todayFirst.start === midnight) continue;
+    // 2. 按天分组
+    const byDay = new Map();
+    for (const p of progs) {
+      const day = dateKey(p.start);
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(p);
+    }
 
-    const previousLast = sorted
-      .filter(p => p.start >= previousDayStart && p.start < midnight && p.stop <= todayFirst.start)
-      .sort((a, b) => b.stop - a.stop)[0];
+    // 获取该频道所有涉及的日期，并排序
+    const sortedDays = Array.from(byDay.keys()).sort();
+    if (sortedDays.length === 0) continue;
 
-    if (!previousLast) continue;
-    if (typeof previousLast.title !== 'string' || !previousLast.title) continue;
+    for (let i = 0; i < sortedDays.length; i++) {
+      const currentDayStr = sortedDays[i];
+      const dayProgs = byDay.get(currentDayStr);
+      if (!dayProgs || dayProgs.length === 0) continue;
 
-    const stop = todayFirst.start - 1;
-    if (stop < midnight) continue;
+      // 计算当天的 00:00:00 时间戳 (UTC+8)
+      const dayMidnight = windowFor(currentDayStr, 0, 0).start;
+      
+      // 找到当天实际上最早开始的节目
+      const firstProgOfTheDay = dayProgs[0];
 
-    filled.push({
-      channel,
-      title: previousLast.title,
-      start: midnight,
-      stop,
-    });
+      // 如果当天第一个节目开始时间不是 00:00:00 (严格大于 midnight)
+      if (firstProgOfTheDay.start > dayMidnight) {
+        let prevProg = null;
+        
+        // 读取前一天最后一个节目
+        if (i > 0) {
+          const prevDayStr = sortedDays[i - 1];
+          const prevDayProgs = byDay.get(prevDayStr);
+          if (prevDayProgs && prevDayProgs.length > 0) {
+            prevProg = prevDayProgs[prevDayProgs.length - 1];
+          }
+        }
+
+        const fillerStart = dayMidnight;
+        // 结束时间为原来当天第一个节目开始时间减1秒钟
+        const fillerStop = firstProgOfTheDay.start - 1;
+
+        // 只有当填充时长大于0时才插入
+        if (fillerStop >= fillerStart) {
+          result.push({
+            channel: channelId,
+            title: prevProg ? prevProg.title : "未知节目", // 使用前一天最后一个节目的标题
+            start: fillerStart,
+            stop: fillerStop,
+          });
+        }
+      }
+
+      // 将当天的原始节目加入结果
+      result.push(...dayProgs);
+    }
   }
 
-  return filled;
+  // 返回前再次排序，确保填充节目位于正确位置
+  return result.sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
 }
 
 export async function collect(source, {
@@ -118,26 +153,55 @@ export async function collect(source, {
   const range = windowFor(today, pastDays, futureDays);
   const channels = await source.channels();
   if (channels.length < minChannels) throw new Error(`Only ${channels.length} channels; expected at least ${minChannels}`);
+  
   const first = dateKey(range.start), last = dateKey(range.stop - 1);
-  // Include the preceding day's final programme if it crosses into our window.
   const firstFetch = dateKey(range.start - DAY);
-  const tasks = channels.flatMap(channel => channel.dates
-    .filter(date => date >= firstFetch && date <= last).map(date => ({ channel, date })));
+  
+  const tasks = [];
+  for (const channel of channels) {
+    let datesToFetch = [];
+    
+    // 策略 1: 如果 channel.dates 存在且是数组，使用它
+    if (Array.isArray(channel.dates)) {
+      datesToFetch = channel.dates.filter(date => date >= firstFetch && date <= last);
+    } 
+    // 策略 2: 如果 channel.dates 不存在，动态生成默认日期范围
+    else {
+      const startDay = new Date(range.start * 1000);
+      const endDay = new Date((range.stop - 1) * 1000);
+      
+      for (let d = new Date(startDay); d <= endDay; d.setDate(d.getDate() + 1)) {
+        datesToFetch.push(dateKey(d.getTime() / 1000));
+      }
+    }
+    
+    for (const date of datesToFetch) {
+      tasks.push({ channel, date });
+    }
+  }
+
   const empty = [], failures = [], programmes = [], discarded = [];
   let next = 0, completed = 0;
+  
+  if (tasks.length === 0) {
+      throw new Error('No tasks generated. Check channel dates configuration or date range.');
+  }
+
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
     while (next < tasks.length) {
-      const { channel, date } = tasks[next++];
+      const taskIndex = next++;
+      const { channel, date } = tasks[taskIndex];
       try {
         const rows = await source.programmes(channel, date);
         if (!rows.length) empty.push({ channel: channel.id, date });
-        // The extra day is only a lookback for programmes crossing midnight.
-        // Malformed old rows that ended before our window cannot affect this EPG.
+        
         const relevant = date < first ? rows.filter(row => row.et > range.start) : rows;
         const parsed = normalize(relevant, channel, date, { onDiscard: p => discarded.push(p) });
-        if (parsed.length && !parsed.some(p => dateKey(p.start) === date)) {
-          throw new Error('Response contains no programmes starting on the requested date');
+        
+        if (parsed.length && date >= first && date <= last && !parsed.some(p => dateKey(p.start) === date)) {
+           throw new Error('Response contains no programmes starting on the requested date');
         }
+        
         programmes.push(...parsed.filter(p => p.start < range.stop && p.stop > range.start));
       } catch (error) {
         failures.push(`${channel.name}/${date}: ${error.message}`);
@@ -146,23 +210,29 @@ export async function collect(source, {
       if (delayMs) await sleep(delayMs);
     }
   }));
-  // Never publish a partial scrape after network/schema failures.
+  
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
-  let result = deduplicate(programmes);
+  
+  // 1. 先去重
+  const rawResult = deduplicate(programmes);
+  
+  // 2. 补全缺失的起始时间 (按新要求逻辑)
+  const filledResult = fillMissingStartOfDay(rawResult);
+  
+  // 3. 再次去重（防止填充节目与现有节目冲突）
+  const result = deduplicate(filledResult);
+
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
-
-  const filled = fillDayStart(result, today);
-  if (filled.length) {
-    result = deduplicate([...result, ...filled]);
-  }
-
+  
   const todayChannels = new Set(result.filter(p => dateKey(p.start) === today).map(p => p.channel));
   const coverage = todayChannels.size / channels.length;
   if (coverage < minTodayCoverage) {
     throw new Error(`Today's channel coverage ${(coverage * 100).toFixed(1)}% is below ${minTodayCoverage * 100}%`);
   }
+  
   const counts = new Map();
   for (const p of result) counts.set(p.channel, (counts.get(p.channel) ?? 0) + 1);
+  
   const manifest = {
     generatedAt: new Date().toISOString(), referenceDate: today, source: HOME,
     format: 'XMLTV', channelSchemaVersion: 2, encoding: 'UTF-8', timezone: 'Asia/Shanghai', logoFormat: 'PNG',
@@ -230,7 +300,6 @@ export async function writeArtifacts(directory, dataset) {
     if (date === dataset.manifest.referenceDate) {
       for (const days of [2, 3]) {
         const end = day + days * DAY;
-        // A short, explicitly requested local window must not masquerade as 2/3 days.
         if (end > stop) continue;
         const combined = dataset.programmes.filter(p => p.start < end && p.stop > day);
         const name = `epg${days}.xml`;
