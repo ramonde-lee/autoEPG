@@ -47,25 +47,6 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
   });
 }
 
-/**
- * 合并 channel/start/title/stop 完全一致的重复行。
- * 只合并完全一致的重复项；title 或 stop 不同的行原样保留，
- * 交由 deduplicate() 做严格冲突检测。
- */
-export function mergeSameSlot(programmes) {
-  const merged = [];
-  for (const programme of programmes) {
-    const duplicate = merged.find(
-      p => p.channel === programme.channel &&
-           p.start === programme.start &&
-           p.title === programme.title &&
-           p.stop === programme.stop
-    );
-    if (!duplicate) merged.push(programme);
-  }
-  return merged;
-}
-
 export function deduplicate(programmes) {
   const unique = new Map();
   for (const programme of programmes) {
@@ -79,83 +60,49 @@ export function deduplicate(programmes) {
   return [...unique.values()].sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
 }
 
-/**
- * 仅用于输出渲染：如果某频道当天第一个节目开始时间不是 00:00:00（UTC+8），
- * 则读取前一天最后一个节目，在当天第一个节目之前补一条：
- *   start = 当天 00:00:00
- *   stop  = 当天第一个节目.start - 1
- *   title = 前一天最后一个节目的标题
- *
- * 参数 allProgrammes 必须是全集（至少包含当天与前一天），
- * 内部再切出当天和前一天，避免因提前过滤而找不到前一天节目。
- *
- * 不修改入参，返回补齐后的新数组。
- * 如果补出来的节目与已有节目在 channel/start 上冲突，保留已有节目，丢弃补出来的那条。
- */
-export function padDayStart(allProgrammes, channels, date) {
-  const midnight = windowFor(date, 0, 0).start;
-  const dayEnd = midnight + DAY;
-  const previousDayStart = midnight - DAY;
-
-  const known = new Set(channels.map(c => c.id));
-
-  // 当天节目（含跨天进入当天的）
-  const todayProgrammes = allProgrammes.filter(
-    p => known.has(p.channel) && p.start < dayEnd && p.stop > midnight
-  );
-  // 前一天节目（含跨天进入当天的）
-  const previousProgrammes = allProgrammes.filter(
-    p => known.has(p.channel) && p.start < midnight && p.stop > previousDayStart
-  );
-
-  const byChannelToday = new Map();
-  for (const p of todayProgrammes) {
-    if (!byChannelToday.has(p.channel)) byChannelToday.set(p.channel, []);
-    byChannelToday.get(p.channel).push(p);
+// Find the last programme on a channel that ends at or before `day` (midnight).
+// Programmes that cross into `day` are intentionally excluded: they already
+// cover the start of the day, so no padding is needed for them.
+export function findPreviousProgramme(programmes, channelId, day) {
+  let best = null;
+  for (const p of programmes) {
+    if (p.channel !== channelId || p.stop > day) continue;
+    if (!best || p.stop > best.stop) best = p;
   }
+  return best;
+}
 
-  const byChannelPrevious = new Map();
-  for (const p of previousProgrammes) {
-    if (!byChannelPrevious.has(p.channel)) byChannelPrevious.set(p.channel, []);
-    byChannelPrevious.get(p.channel).push(p);
+// If a channel's first programme on `day` does not start at 00:00:00, prepend a
+// filler programme that runs from 00:00:00 up to (first.start - 1s) and reuses
+// the title of the previous day's last programme on that channel.
+// `programmes` is the day's slice; `allProgrammes` is the full dataset used to
+// look up the previous programme. `day` must be a midnight epoch second.
+export function padDayStart(programmes, allProgrammes, day, { onPad = () => {} } = {}) {
+  const endOfDay = day + DAY;
+  const byChannel = new Map();
+  for (const p of programmes) {
+    if (p.start >= day && p.start < endOfDay) {
+      if (!byChannel.has(p.channel)) byChannel.set(p.channel, []);
+      byChannel.get(p.channel).push(p);
+    }
   }
-
-  const existing = new Set(todayProgrammes.map(p => `${p.channel}/${p.start}`));
-  const padded = [...todayProgrammes];
-
-  for (const [channel, list] of byChannelToday) {
-    const sorted = [...list].sort((a, b) => a.start - b.start);
-
-    if (sorted.some(p => p.start === midnight)) continue;
-    if (existing.has(`${channel}/${midnight}`)) continue;
-
-    const todayFirst = sorted.find(p => p.start >= midnight && p.start < dayEnd);
-    if (!todayFirst) continue;
-    if (todayFirst.start === midnight) continue;
-
-    const previousList = byChannelPrevious.get(channel) ?? [];
-    const previousLast = previousList
-      .filter(p => p.stop <= todayFirst.start)
-      .sort((a, b) => b.stop - a.stop)[0];
-
-    if (!previousLast) continue;
-
-    const stop = todayFirst.start - 1;
-    if (stop < midnight) continue;
-
-    const key = `${channel}/${midnight}`;
-    if (existing.has(key)) continue;
-
-    padded.push({
-      channel,
-      title: previousLast.title,
-      start: midnight,
-      stop,
-    });
-    existing.add(key);
+  const pads = [];
+  for (const [channelId, list] of byChannel) {
+    list.sort((a, b) => a.start - b.start);
+    const first = list[0];
+    if (first.start <= day) continue; // already covers 00:00:00
+    const prev = findPreviousProgramme(allProgrammes, channelId, day);
+    if (!prev) continue; // no previous programme to borrow a title from
+    const start = day;
+    const stop = first.start - 1;
+    if (stop < start) continue; // no room for a 1-second filler
+    const padded = { channel: channelId, title: prev.title, start, stop, padded: true };
+    pads.push(padded);
+    onPad({ channel: channelId, date: dateKey(day), title: prev.title, start, stop,
+      sourceProgrammeStart: prev.start, sourceProgrammeStop: prev.stop });
   }
-
-  return padded;
+  if (!pads.length) return programmes;
+  return [...programmes, ...pads];
 }
 
 export async function collect(source, {
@@ -196,10 +143,7 @@ export async function collect(source, {
   }));
   // Never publish a partial scrape after network/schema failures.
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
-
-  // 先合并完全一致的重复行，再交给 deduplicate() 做严格冲突检测
-  const merged = mergeSameSlot(programmes);
-  const result = deduplicate(merged);
+  const result = deduplicate(programmes);
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
   const todayChannels = new Set(result.filter(p => dateKey(p.start) === today).map(p => p.channel));
   const coverage = todayChannels.size / channels.length;
@@ -256,15 +200,24 @@ export async function writeArtifacts(directory, dataset) {
   const { from, to } = dataset.manifest.requestedDates;
   const start = windowFor(from, 0, 0).start;
   const stop = windowFor(to, 0, 0).stop;
+
+  // Build a window's programmes, padding the start of the first day to 00:00.
+  // `windowStart` must be a midnight epoch second; `days` is the window length.
+  // `channelFilter`, when provided, restricts to a set of channel ids.
+  const paddedProgrammes = [];
+  const buildWindow = (windowStart, days, channelFilter = null) => {
+    const end = windowStart + days * DAY;
+    const raw = dataset.programmes.filter(p =>
+      p.start < end && p.stop > windowStart &&
+      (!channelFilter || channelFilter.has(p.channel)));
+    return padDayStart(raw, dataset.programmes, windowStart, { onPad: p => paddedProgrammes.push(p) });
+  };
+
   for (let day = start; day < stop; day += DAY) {
     const date = dateKey(day);
-    const programmes = dataset.programmes.filter(p => p.start < day + DAY && p.stop > day);
+    const programmes = buildWindow(day, 1);
     if (!programmes.length) continue;
-
-    // 仅渲染时补头，使用全集以便能看到前一天最后一个节目
-    const padded = padDayStart(dataset.programmes, dataset.channels, date);
-    const xml = Buffer.from(renderXml(dataset.channels, padded));
-
+    const xml = Buffer.from(renderXml(dataset.channels, programmes));
     const manifest = {
       ...dataset.manifest, date, requestedDates: { from: date, to: date }, programmeCount: programmes.length,
       channelsWithProgrammes: new Set(programmes.map(p => p.channel)).size,
@@ -272,6 +225,7 @@ export async function writeArtifacts(directory, dataset) {
       latestStop: new Date(programmes.reduce((max, p) => Math.max(max, p.stop), -Infinity) * 1000).toISOString(),
       emptySchedules: dataset.manifest.emptySchedules.filter(s => s.date === date),
       discardedProgrammes: (dataset.manifest.discardedProgrammes ?? []).filter(p => dateKey(p.start) === date),
+      paddedProgrammes: paddedProgrammes.filter(p => p.date === date),
       xmlBytes: xml.length,
     };
     const files = { 'epg.xml': xml };
@@ -281,10 +235,9 @@ export async function writeArtifacts(directory, dataset) {
         const end = day + days * DAY;
         // A short, explicitly requested local window must not masquerade as 2/3 days.
         if (end > stop) continue;
-        const combined = dataset.programmes.filter(p => p.start < end && p.stop > day);
-        const paddedCombined = padDayStart(dataset.programmes, dataset.channels, date);
+        const combined = buildWindow(day, days);
         const name = `epg${days}.xml`;
-        files[name] = Buffer.from(renderXml(dataset.channels, paddedCombined));
+        files[name] = Buffer.from(renderXml(dataset.channels, combined));
         manifest.variants.push({ file: name, days, from: date, to: dateKey(end - 1),
           programmeCount: combined.length, bytes: files[name].length });
       }
@@ -298,9 +251,9 @@ export async function writeArtifacts(directory, dataset) {
       const feeds = [];
       for (const variant of variants) {
         const name = groupFile(variant.file, group.id);
-        const subset = dataset.programmes.filter(p => ids.has(p.channel) && p.start < day + variant.days * DAY && p.stop > day);
-        const paddedSubset = padDayStart(dataset.programmes, members, date);
-        files[name] = Buffer.from(renderXml(members, paddedSubset, { sourceName: group.name }));
+        const variantStart = windowFor(variant.from, 0, 0).start;
+        const subset = buildWindow(variantStart, variant.days, ids);
+        files[name] = Buffer.from(renderXml(members, subset, { sourceName: group.name }));
         const feed = { file: name, days: variant.days, from: variant.from, to: variant.to,
           programmeCount: subset.length, bytes: files[name].length, groupId: group.id };
         feeds.push(feed);
