@@ -13,7 +13,8 @@ on:
         default: false
   schedule:
     # UTC 16:00 -> next day 00:00 in Beijing. GitHub may delay scheduled runs.
-    - cron: '0 16 * * *'
+    - cron: '15 0,12 * * *'
+      timezone: 'Asia/Shanghai'
 
 permissions:
   contents: read
