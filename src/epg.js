@@ -26,6 +26,7 @@ export function windowFor(today, pastDays, futureDays) {
 }
 
 export function cleanText(value) {
+  // XML 1.0 permits tabs, CR/LF, and these Unicode ranges only.
   return String(value).replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '').trim();
 }
 
@@ -38,6 +39,8 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
         start < midnight || start >= midnight + 2 * DAY || stop < start || stop - start > DAY) {
       throw new Error(`Invalid programme ${channel.pid}/${date}/${row.programId ?? '?'}: title or timestamps`);
     }
+    // Schedule edits can leave empty intervals beside their valid replacements.
+    // They contain no airtime; omit them without guessing an end or changing other rows.
     if (stop === start) {
       onDiscard({ channel: channel.id, date, programId: row.programId ?? null,
         title, start, stop, reason: 'zero-duration' });
@@ -61,27 +64,28 @@ export function deduplicate(programmes) {
 }
 
 /**
- * 补全每天起始时间的缺失部分
- * @param {Array} programmes - 已去重且排序的节目列表
- * @returns {Array} - 补全后的节目列表
+ * 核心修正逻辑：
+ * 遍历所有节目，按频道和日期分组。
+ * 如果某天的第一个节目开始时间不是当天的 00:00:00，则插入一个填充节目。
  */
-function fillMissingStartOfDay(programmes) {
-  if (!programmes || programmes.length === 0) return [];
+function fillMissingStartOfDay(allProgrammes) {
+  if (!allProgrammes || allProgrammes.length === 0) return [];
 
   // 1. 按频道分组
   const byChannel = new Map();
-  for (const p of programmes) {
+  for (const p of allProgrammes) {
     if (!byChannel.has(p.channel)) byChannel.set(p.channel, []);
     byChannel.get(p.channel).push(p);
   }
 
-  const result = [];
+  const filledProgrammes = [];
 
   for (const [channelId, progs] of byChannel.entries()) {
-    // 确保按时间排序
+    // 按时间排序
     progs.sort((a, b) => a.start - b.start);
 
     // 2. 按天分组
+    // 我们需要知道每一天有哪些节目，以便找到“第一个”
     const byDay = new Map();
     for (const p of progs) {
       const day = dateKey(p.start);
@@ -96,14 +100,17 @@ function fillMissingStartOfDay(programmes) {
       const currentDayStr = sortedDays[i];
       const dayProgs = byDay.get(currentDayStr);
       
-      // 计算当天的 00:00:00 时间戳 (UTC+8)
+      // 计算当天的 00:00:00 时间戳
       const dayMidnight = windowFor(currentDayStr, 0, 0).start;
       
       // 找到当天实际上最早开始的节目
+      // 注意：dayProgs 已经按时间排序，所以第一个就是最早的
       const firstProgOfTheDay = dayProgs[0];
 
       // 检查是否从 00:00:00 开始
+      // 允许微小的误差吗？不，EPG 通常是整秒或整分。严格比较。
       if (firstProgOfTheDay.start !== dayMidnight) {
+        // 需要填充
         let fillerTitle = "未知节目";
         
         // 尝试查找前一天的最后一个节目
@@ -111,6 +118,7 @@ function fillMissingStartOfDay(programmes) {
           const prevDayStr = sortedDays[i - 1];
           const prevDayProgs = byDay.get(prevDayStr);
           if (prevDayProgs && prevDayProgs.length > 0) {
+            // 前一天最后一个节目
             const lastPrevProg = prevDayProgs[prevDayProgs.length - 1];
             fillerTitle = `${lastPrevProg.title} (续)`;
           }
@@ -122,7 +130,7 @@ function fillMissingStartOfDay(programmes) {
 
         // 只有当填充时长大于0时才添加
         if (fillerStop > fillerStart) {
-          result.push({
+          filledProgrammes.push({
             channel: channelId,
             title: fillerTitle,
             start: fillerStart,
@@ -133,11 +141,11 @@ function fillMissingStartOfDay(programmes) {
       }
 
       // 将当天的原始节目加入结果
-      result.push(...dayProgs);
+      filledProgrammes.push(...dayProgs);
     }
   }
 
-  return result;
+  return filledProgrammes;
 }
 
 export async function collect(source, {
@@ -153,10 +161,10 @@ export async function collect(source, {
   // Include the preceding day's final programme if it crosses into our window.
   const firstFetch = dateKey(range.start - DAY);
   
-  // 准备任务列表 - 增加健壮性检查
+  // 准备任务列表
   const tasks = [];
   for (const channel of channels) {
-    // 安全地获取 dates 数组
+    // 确保 channel.dates 存在且是一个数组
     const dates = Array.isArray(channel.dates) ? channel.dates : [];
     const relevantDates = dates.filter(date => date >= firstFetch && date <= last);
     for (const date of relevantDates) {
@@ -167,6 +175,7 @@ export async function collect(source, {
   const empty = [], failures = [], programmes = [], discarded = [];
   let next = 0, completed = 0;
   
+  // 如果没有任务，直接抛出错误，避免后续逻辑出错
   if (tasks.length === 0) {
       throw new Error('No tasks generated. Check channel dates configuration.');
   }
@@ -179,15 +188,19 @@ export async function collect(source, {
         const rows = await source.programmes(channel, date);
         if (!rows.length) empty.push({ channel: channel.id, date });
         
-        // 过滤出相关数据
+        // The extra day is only a lookback for programmes crossing midnight.
         const relevant = date < first ? rows.filter(row => row.et > range.start) : rows;
         
         const parsed = normalize(relevant, channel, date, { onDiscard: p => discarded.push(p) });
         
-        // 验证逻辑：如果请求的是范围内的日期，且解析后有数据，但没有任何数据是从该日期开始的，则报错
-        // 注意：cross-midnight 的节目 start 在前一天，所以如果某天只有 cross-midnight 节目，parsed 里就没有 start === date 的
-        // 原代码逻辑如此，我们保留，但需注意这可能导致某些合法情况报错。
+        // 验证：如果请求了某一天，至少应该有一些节目是从那一天开始的（除非是全天空缺，但这会被 empty 捕获）
+        // 这里保留原有逻辑，但要注意 cross-midnight 的节目可能 start 在前一天
         if (parsed.length && date >= first && date <= last && !parsed.some(p => dateKey(p.start) === date)) {
+           // 这是一个警告还是错误？原代码是错误。保留。
+           // 但如果是因为我们只取了 cross-midnight 的部分，可能会导致这个问题。
+           // 原逻辑: date < first 时做了 filter。 date >= first 时没做。
+           // 如果 API 返回的节目全是跨天的（start 在前一天），那么 parsed 里就没有 start === date 的节目。
+           // 这种情况在某些 EPG 源是合法的。但原代码认为这是错误。我们暂时保留原代码行为。
            throw new Error('Response contains no programmes starting on the requested date');
         }
         
@@ -208,7 +221,7 @@ export async function collect(source, {
   // 2. 再补全缺失的起始时间
   const filledResult = fillMissingStartOfDay(rawResult);
   
-  // 3. 再次去重（防止填充节目与现有节目冲突）
+  // 3. 再次去重（防止填充节目与现有节目冲突，虽然逻辑上不应冲突）
   const result = deduplicate(filledResult);
 
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
