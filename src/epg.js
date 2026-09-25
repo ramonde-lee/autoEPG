@@ -154,7 +154,7 @@ export async function collect(source, {
   const counts = new Map();
   for (const p of result) counts.set(p.channel, (counts.get(p.channel) ?? 0) + 1);
   const manifest = {
-    generatedAt: new Date().toISOString(), referenceDate: today, source: HOME,
+    generatedAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, -1), referenceDate: today, source: HOME,
     format: 'XMLTV', channelSchemaVersion: 2, encoding: 'UTF-8', timezone: 'Asia/Shanghai', logoFormat: 'PNG',
     requestedDates: { from: first, to: last },
     channelCount: channels.length, programmeCount: result.length,
