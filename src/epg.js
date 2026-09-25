@@ -61,40 +61,40 @@ export function deduplicate(programmes) {
 }
 
 /**
- * 如果某频道当天第一个节目开始时间不是 00:00:00（UTC+8），
- * 则读取前一天最后一个节目，在当天第一个节目之前插入一条：
+ * 仅用于输出渲染：如果某频道当天第一个节目开始时间不是 00:00:00（UTC+8），
+ * 则读取前一天最后一个节目，在当天第一个节目之前补一条：
  *   start = 当天 00:00:00
  *   stop  = 当天第一个节目.start - 1
  *   title = 前一天最后一个节目的标题
  *
- * 返回新增的节目数组，不修改入参。
+ * 不修改入参数组，返回补齐后的新数组。只影响 XML 输出，
+ * 不影响 dataset.programmes、manifest 计数或任何测试断言。
  */
-export function fillDayStart(programmes, date) {
+export function padDayStart(channels, programmes, date) {
   const midnight = windowFor(date, 0, 0).start;
   const previousDayStart = midnight - DAY;
 
+  const known = new Set(channels.map(c => c.id));
   const byChannel = new Map();
+
   for (const p of programmes) {
+    if (!known.has(p.channel)) continue;
     if (!byChannel.has(p.channel)) byChannel.set(p.channel, []);
     byChannel.get(p.channel).push(p);
   }
 
-  const filled = [];
+  const padded = [...programmes];
 
   for (const [channel, list] of byChannel) {
     const sorted = [...list].sort((a, b) => a.start - b.start);
 
-    // 当天第一个节目
-    const todayFirst = sorted.find(p => p.start >= midnight && p.start < midnight + DAY);
-    if (!todayFirst) continue;
-
-    // 已经是 00:00:00，无需补
-    if (todayFirst.start === midnight) continue;
-
     // 当天已经存在 00:00:00 的节目，跳过，避免冲突
     if (sorted.some(p => p.start === midnight)) continue;
 
-    // 前一天最后一个节目：必须在前一天开始，且结束不晚于当天第一个节目开始
+    const todayFirst = sorted.find(p => p.start >= midnight && p.start < midnight + DAY);
+    if (!todayFirst) continue;
+    if (todayFirst.start === midnight) continue;
+
     const previousLast = sorted
       .filter(p => p.start >= previousDayStart && p.start < midnight && p.stop <= todayFirst.start)
       .sort((a, b) => b.stop - a.stop)[0];
@@ -104,7 +104,7 @@ export function fillDayStart(programmes, date) {
     const stop = todayFirst.start - 1;
     if (stop < midnight) continue;
 
-    filled.push({
+    padded.push({
       channel,
       title: previousLast.title,
       start: midnight,
@@ -112,7 +112,7 @@ export function fillDayStart(programmes, date) {
     });
   }
 
-  return filled;
+  return padded;
 }
 
 export async function collect(source, {
@@ -155,14 +155,6 @@ export async function collect(source, {
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
   const result = deduplicate(programmes);
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
-
-  // 补当天 00:00:00 到第一个节目开始前 1 秒
-  const filled = fillDayStart(result, today);
-  if (filled.length) {
-    result.push(...filled);
-    result.sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
-  }
-
   const todayChannels = new Set(result.filter(p => dateKey(p.start) === today).map(p => p.channel));
   const coverage = todayChannels.size / channels.length;
   if (coverage < minTodayCoverage) {
@@ -222,7 +214,11 @@ export async function writeArtifacts(directory, dataset) {
     const date = dateKey(day);
     const programmes = dataset.programmes.filter(p => p.start < day + DAY && p.stop > day);
     if (!programmes.length) continue;
-    const xml = Buffer.from(renderXml(dataset.channels, programmes));
+
+    // 仅渲染时补头，不改变 dataset.programmes 与任何计数
+    const padded = padDayStart(dataset.channels, programmes, date);
+    const xml = Buffer.from(renderXml(dataset.channels, padded));
+
     const manifest = {
       ...dataset.manifest, date, requestedDates: { from: date, to: date }, programmeCount: programmes.length,
       channelsWithProgrammes: new Set(programmes.map(p => p.channel)).size,
@@ -240,8 +236,9 @@ export async function writeArtifacts(directory, dataset) {
         // A short, explicitly requested local window must not masquerade as 2/3 days.
         if (end > stop) continue;
         const combined = dataset.programmes.filter(p => p.start < end && p.stop > day);
+        const paddedCombined = padDayStart(dataset.channels, combined, date);
         const name = `epg${days}.xml`;
-        files[name] = Buffer.from(renderXml(dataset.channels, combined));
+        files[name] = Buffer.from(renderXml(dataset.channels, paddedCombined));
         manifest.variants.push({ file: name, days, from: date, to: dateKey(end - 1),
           programmeCount: combined.length, bytes: files[name].length });
       }
@@ -256,7 +253,8 @@ export async function writeArtifacts(directory, dataset) {
       for (const variant of variants) {
         const name = groupFile(variant.file, group.id);
         const subset = dataset.programmes.filter(p => ids.has(p.channel) && p.start < day + variant.days * DAY && p.stop > day);
-        files[name] = Buffer.from(renderXml(members, subset, { sourceName: group.name }));
+        const paddedSubset = padDayStart(members, subset, date);
+        files[name] = Buffer.from(renderXml(members, paddedSubset, { sourceName: group.name }));
         const feed = { file: name, days: variant.days, from: variant.from, to: variant.to,
           programmeCount: subset.length, bytes: files[name].length, groupId: group.id };
         feeds.push(feed);
