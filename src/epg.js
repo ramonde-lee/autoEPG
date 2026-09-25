@@ -30,7 +30,6 @@ export function windowFor(today, pastDays, futureDays) {
 }
 
 export function cleanText(value) {
-  // XML 1.0 permits tabs, CR/LF, and these Unicode ranges only.
   return String(value)
     .replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '')
     .trim();
@@ -53,9 +52,6 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
     ) {
       throw new Error(`Invalid programme ${channel.pid}/${date}/${row.programId ?? '?'}: title or timestamps`);
     }
-
-    // Schedule edits can leave empty intervals beside their valid replacements.
-    // They contain no airtime; omit them without guessing an end or changing other rows.
     if (stop === start) {
       onDiscard({
         channel: channel.id,
@@ -68,7 +64,6 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
       });
       return [];
     }
-
     return [{ channel: channel.id, title, start, stop }];
   });
 }
@@ -78,7 +73,6 @@ export function deduplicate(programmes) {
   for (const programme of programmes) {
     if (!programme || typeof programme.channel !== 'string') continue;
     if (!Number.isSafeInteger(programme.start) || !Number.isSafeInteger(programme.stop)) continue;
-
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
     if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
@@ -86,19 +80,11 @@ export function deduplicate(programmes) {
     }
     unique.set(key, programme);
   }
-
   return [...unique.values()].sort(
     (a, b) => a.channel.localeCompare(b.channel) || a.start - b.start
   );
 }
 
-/**
- * 如果某频道当天首个节目不是 00:00:00（UTC+8），
- * 则用前一天最后一个节目的标题，补一个
- * [当天 00:00:00, 当天首个节目.start - 1] 的节目。
- *
- * 不修改入参数组，返回新增节目列表。
- */
 export function fillDayStart(programmes, date) {
   const midnight = windowFor(date, 0, 0).start;
   const previousDayStart = midnight - DAY;
@@ -108,7 +94,6 @@ export function fillDayStart(programmes, date) {
     if (!programme || typeof programme.channel !== 'string') continue;
     if (!Number.isSafeInteger(programme.start) || !Number.isSafeInteger(programme.stop)) continue;
     if (typeof programme.title !== 'string' || !programme.title) continue;
-
     if (!byChannel.has(programme.channel)) byChannel.set(programme.channel, []);
     byChannel.get(programme.channel).push(programme);
   }
@@ -118,7 +103,6 @@ export function fillDayStart(programmes, date) {
   for (const [channel, list] of byChannel) {
     const sorted = [...list].sort((a, b) => a.start - b.start);
 
-    // 当天已经有 00:00:00 的节目，跳过，避免冲突
     if (sorted.some(p => p.start === midnight)) continue;
 
     const todayFirst = sorted.find(p => p.start >= midnight && p.start < midnight + DAY);
@@ -126,12 +110,7 @@ export function fillDayStart(programmes, date) {
     if (todayFirst.start === midnight) continue;
 
     const previousLast = sorted
-      .filter(
-        p =>
-          p.start >= previousDayStart &&
-          p.start < midnight &&
-          p.stop <= todayFirst.start
-      )
+      .filter(p => p.start >= previousDayStart && p.start < midnight && p.stop <= todayFirst.start)
       .sort((a, b) => b.stop - a.stop)[0];
 
     if (!previousLast) continue;
@@ -151,19 +130,16 @@ export function fillDayStart(programmes, date) {
   return filled;
 }
 
-export async function collect(
-  source,
-  {
-    today = dateKey(Date.now() / 1000),
-    pastDays = 3,
-    futureDays = 3,
-    concurrency = 4,
-    minChannels = 50,
-    minTodayCoverage = 0.9,
-    delayMs = 150,
-    onProgress = () => {},
-  } = {}
-) {
+export async function collect(source, {
+  today = dateKey(Date.now() / 1000),
+  pastDays = 3,
+  futureDays = 3,
+  concurrency = 4,
+  minChannels = 50,
+  minTodayCoverage = 0.9,
+  delayMs = 150,
+  onProgress = () => {},
+} = {}) {
   const range = windowFor(today, pastDays, futureDays);
   const channels = await source.channels();
 
@@ -173,8 +149,6 @@ export async function collect(
 
   const first = dateKey(range.start);
   const last = dateKey(range.stop - 1);
-
-  // Include the preceding day's final programme if it crosses into our window.
   const firstFetch = dateKey(range.start - DAY);
 
   const tasks = channels.flatMap(channel =>
@@ -199,8 +173,6 @@ export async function collect(
           const rows = await source.programmes(channel, date);
           if (!rows.length) empty.push({ channel: channel.id, date });
 
-          // The extra day is only a lookback for programmes crossing midnight.
-          // Malformed old rows that ended before our window cannot affect this EPG.
           const relevant = date < first ? rows.filter(row => row.et > range.start) : rows;
           const parsed = normalize(relevant, channel, date, {
             onDiscard: p => discarded.push(p),
@@ -223,7 +195,6 @@ export async function collect(
     })
   );
 
-  // Never publish a partial scrape after network/schema failures.
   if (failures.length) {
     throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
   }
@@ -375,8 +346,6 @@ export async function writeArtifacts(directory, dataset) {
     if (date === dataset.manifest.referenceDate) {
       for (const days of [2, 3]) {
         const end = day + days * DAY;
-
-        // A short, explicitly requested local window must not masquerade as 2/3 days.
         if (end > stop) continue;
 
         const combined = dataset.programmes.filter(p => p.start < end && p.stop > day);
