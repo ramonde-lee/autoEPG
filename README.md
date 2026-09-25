@@ -4,7 +4,7 @@
 
 ## 当天订阅
 
-**[https://github.com/TvWasm/autoEPG/releases/latest/download/epg.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg.xml)**
+**[https://github.com/ramondelee/autoEPG/releases/latest/download/epg.xml](https://github.com/ramondelee/autoEPG/releases/latest/download/epg.xml)**
 
 此固定地址只提供当天节目单，文件是未压缩的 UTF-8 XML，没有 `.gz`。播放器需要支持 HTTPS 重定向。
 
@@ -12,9 +12,9 @@
 
 | 文件 | 日期范围 | 订阅链接 |
 | --- | --- | --- |
-| `epg.xml` | 今天 | [单日](https://github.com/TvWasm/autoEPG/releases/latest/download/epg.xml) |
-| `epg2.xml` | 今天、明天 | [两日](https://github.com/TvWasm/autoEPG/releases/latest/download/epg2.xml) |
-| `epg3.xml` | 今天、明天、后天 | [三日](https://github.com/TvWasm/autoEPG/releases/latest/download/epg3.xml) |
+| `epg.xml` | 今天 | [单日](https://github.com/ramondelee/autoEPG/releases/latest/download/epg.xml) |
+| `epg2.xml` | 今天、明天 | [两日](https://github.com/ramondelee/autoEPG/releases/latest/download/epg2.xml) |
+| `epg3.xml` | 今天、明天、后天 | [三日](https://github.com/ramondelee/autoEPG/releases/latest/download/epg3.xml) |
 
 三份文件都是独立、未压缩的标准 XMLTV，每日一起刷新。未来日期尚未公布的节目不会凭空补齐，实际范围和节目数见 `manifest.json` 的 `variants`。
 
@@ -32,7 +32,7 @@
 指定日期的固定下载格式：
 
 ```text
-https://github.com/TvWasm/autoEPG/releases/download/2026-09-09/epg.xml
+https://github.com/ramondelee/autoEPG/releases/download/2026-09-09/epg.xml
 ```
 
 到 9 月 10 日刷新时，`2026-09-10` 转为正式版并设为 Latest，9 月 9 日保留为历史版。源站调整节目后，刷新会**替换同日期版本的附件**，不会再创建按运行次数编号的版本。
@@ -43,7 +43,7 @@ https://github.com/TvWasm/autoEPG/releases/download/2026-09-09/epg.xml
 
 ## 更新规则
 
-[Update EPG 工作流](https://github.com/TvWasm/autoEPG/actions/workflows/epg.yml) 每天北京时间 **00:00** 运行一次，对应 UTC `0 16 * * *`。GitHub 排队可能延迟，尤其是整点，文件不保证零点整完成发布。
+[Update EPG 工作流](https://github.com/ramondelee/autoEPG/actions/workflows/epg.yml) 每天北京时间 **00:00** 运行一次，对应 UTC `0 16 * * *`。GitHub 排队可能延迟，尤其是整点，文件不保证零点整完成发布。
 
 - 默认刷新过去 3 天、今天和未来 3 天，以源站实际公布的日期为准。范围之外的已发布历史版本保留。
 - 动态发现频道及节目日期；额外读取起始日前一天，补全跨午夜节目。
@@ -74,14 +74,14 @@ https://your-stream-provider.example/cctv1.m3u8
 
 ## 频道分组
 
-主文件的 `source-info-name="央视频"`，频道按“央视频道”“卫视频道”排列。XMLTV 没有标准的频道分组字段，因此不添加自定义 XML 字段；应用可读取 [channels.json](https://github.com/TvWasm/autoEPG/releases/latest/download/channels.json) 的 `groupId`、`group`，或 [groups.json](https://github.com/TvWasm/autoEPG/releases/latest/download/groups.json) 的频道 ID 列表和订阅文件索引。
+主文件的 `source-info-name="央视频"`，频道按“央视频道”“卫视频道”排列。XMLTV 没有标准的频道分组字段，因此不添加自定义 XML 字段；应用可读取 [channels.json](https://github.com/ramondelee/autoEPG/releases/latest/download/channels.json) 的 `groupId`、`group`，或 [groups.json](https://github.com/ramondelee/autoEPG/releases/latest/download/groups.json) 的频道 ID 列表和订阅文件索引。
 
 只需一类频道时，可订阅独立的标准 XMLTV 文件；分组文件的 `source-info-name` 为对应分组名称：
 
 | 分组 | 今天 | 今天、明天 | 今天、明天、后天 |
 | --- | --- | --- | --- |
-| 央视频道（`cctv`） | [epg-cctv.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg-cctv.xml) | [epg2-cctv.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg2-cctv.xml) | [epg3-cctv.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg3-cctv.xml) |
-| 卫视频道（`weishi`） | [epg-weishi.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg-weishi.xml) | [epg2-weishi.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg2-weishi.xml) | [epg3-weishi.xml](https://github.com/TvWasm/autoEPG/releases/latest/download/epg3-weishi.xml) |
+| 央视频道（`cctv`） | [epg-cctv.xml](https://github.com/ramondelee/autoEPG/releases/latest/download/epg-cctv.xml) | [epg2-cctv.xml](https://github.com/ramondelee/autoEPG/releases/latest/download/epg2-cctv.xml) | [epg3-cctv.xml](https://github.com/ramondelee/autoEPG/releases/latest/download/epg3-cctv.xml) |
+| 卫视频道（`weishi`） | [epg-weishi.xml](https://github.com/ramondelee/autoEPG/releases/latest/download/epg-weishi.xml) | [epg2-weishi.xml](https://github.com/ramondelee/autoEPG/releases/latest/download/epg2-weishi.xml) | [epg3-weishi.xml](https://github.com/ramondelee/autoEPG/releases/latest/download/epg3-weishi.xml) |
 
 分组跟随央视频源站分类（包括源站归入卫视频道的 CETV1）。日期版本也提供两个单日分组文件。分组和完整文件使用相同的频道 ID、别名及 PNG 台标。
 
