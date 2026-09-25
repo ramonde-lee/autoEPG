@@ -3,6 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { mkdir, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { HOME } from './source.js';
 import { GROUPS, groupedChannels, groupFile } from './channels.js';
 
@@ -276,6 +277,12 @@ export async function writeArtifacts(directory, dataset, { padDayStart: shouldPa
         manifest.variants.push(feed);
       }
       groups.push({ id: group.id, name: group.name, channelIds: members.map(c => c.id), feeds });
+    }
+    // Mirror every XML asset as a gzipped sibling so clients can fetch a
+    // smaller payload without re-encoding. gzipSync is deterministic for a
+    // given input, so SHA256SUMS stays reproducible.
+    for (const name of Object.keys(files)) {
+      if (name.endsWith('.xml')) files[`${name}.gz`] = gzipSync(files[name]);
     }
     files['channels.json'] = Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n');
     files['groups.json'] = Buffer.from(JSON.stringify({ source: '央视频', channelSchemaVersion: 2, groups }, null, 2) + '\n');
