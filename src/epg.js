@@ -64,10 +64,11 @@ export function deduplicate(programmes) {
  * 补全每天起始时间的缺失部分
  * 规则：如果当天第一个节目开始时间不是00:00:00，读取前一天最后一个节目插入当天第一个节目之前，
  * 开始时间为00:00:00，结束时间为原来当天第一个节目开始时间减1秒钟。
- * 
- * ⚠️ 关键约束：
- * 1. 仅当该天已有原始节目时才触发补全（不为空日程发明节目）
- * 2. 若 00:00:00 已被跨天节目覆盖，则跳过补全
+ *
+ * ⚠️ 严格约束（匹配测试预期）：
+ * 1. 仅当该天在原始数据中已有节目时才考虑补全
+ * 2. 若 00:00:00 已被任何节目（含跨天）覆盖，跳过
+ * 3. 若前一天无节目可供引用，不生成填充（不发明“未知节目”）
  */
 function fillMissingStartOfDay(programmes) {
   if (!programmes || programmes.length === 0) return [];
@@ -83,7 +84,7 @@ function fillMissingStartOfDay(programmes) {
   for (const [channelId, progs] of byChannel.entries()) {
     progs.sort((a, b) => a.start - b.start);
 
-    // 仅基于实际存在节目的日期进行分组
+    // 按 start 日期分组（仅包含实际有节目的天）
     const byDay = new Map();
     for (const p of progs) {
       const day = dateKey(p.start);
@@ -98,14 +99,16 @@ function fillMissingStartOfDay(programmes) {
       const dayProgs = byDay.get(currentDayStr);
       const dayMidnight = windowFor(currentDayStr, 0, 0).start;
 
-      // ✅ 关键检查：00:00:00 是否已被任何节目（含跨天节目）覆盖
+      // ✅ 检查 00:00:00 是否已被任何节目覆盖（使用全量 progs）
       const coversMidnight = progs.some(p => p.start <= dayMidnight && p.stop > dayMidnight);
 
+      // 仅在未覆盖 且 当天有原始节目 时处理
       if (!coversMidnight && dayProgs.length > 0) {
         const firstProgOfTheDay = dayProgs[0];
 
-        // 仅当当天首个节目确实在 00:00:00 之后开始时才填充
+        // 仅当首个节目确实在 00:00:00 之后开始
         if (firstProgOfTheDay.start > dayMidnight) {
+          // ✅ 关键：必须有前一天的真实节目才可补全，否则跳过（不发明节目）
           let prevProg = null;
           if (i > 0) {
             const prevDayStr = sortedDays[i - 1];
@@ -115,14 +118,17 @@ function fillMissingStartOfDay(programmes) {
             }
           }
 
-          const fillerStop = firstProgOfTheDay.start - 1;
-          if (fillerStop >= dayMidnight) {
-            result.push({
-              channel: channelId,
-              title: prevProg ? prevProg.title : "未知节目",
-              start: dayMidnight,
-              stop: fillerStop,
-            });
+          // 只有找到前一天真实节目时才插入填充
+          if (prevProg) {
+            const fillerStop = firstProgOfTheDay.start - 1;
+            if (fillerStop >= dayMidnight) {
+              result.push({
+                channel: channelId,
+                title: prevProg.title,
+                start: dayMidnight,
+                stop: fillerStop,
+              });
+            }
           }
         }
       }
