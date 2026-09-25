@@ -12,9 +12,11 @@ const OFFSET = 8 * 3600;
 export function dateKey(seconds) {
   return new Date((seconds + OFFSET) * 1000).toISOString().slice(0, 10);
 }
+
 export function xmltvTime(seconds) {
   return new Date((seconds + OFFSET) * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, '') + ' +0800';
 }
+
 export function windowFor(today, pastDays, futureDays) {
   const midnight = Date.parse(`${today}T00:00:00+08:00`) / 1000;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || !Number.isFinite(midnight) || dateKey(midnight) !== today) {
@@ -22,9 +24,30 @@ export function windowFor(today, pastDays, futureDays) {
   }
   return { start: midnight - pastDays * DAY, stop: midnight + (futureDays + 1) * DAY };
 }
+
 export function cleanText(value) {
   // XML 1.0 permits tabs, CR/LF, and these Unicode ranges only.
   return String(value).replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '').trim();
+}
+
+/**
+ * 辅助函数：将秒数转换为 HH:mm:ss 格式 (基于 UTC+8)
+ */
+function secondsToHHMMSS(seconds) {
+  const date = new Date((seconds + OFFSET) * 1000);
+  const h = String(date.getUTCHours()).padStart(2, '0');
+  const m = String(date.getUTCMinutes()).padStart(2, '0');
+  const s = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+/**
+ * 辅助函数：解析 HH:mm:ss 为当天的秒数 (基于 UTC+8)
+ */
+function parseHHMMSS(timeStr, dayMidnight) {
+  const [h, m, s] = timeStr.split(':').map(Number);
+  // dayMidnight 是 UTC 秒数，对应本地 00:00:00
+  return dayMidnight + h * 3600 + m * 60 + s;
 }
 
 export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
@@ -52,12 +75,94 @@ export function deduplicate(programmes) {
   for (const programme of programmes) {
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
-    if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
+    if (previous && (previous.title !== programme.title || previous.stop !== previous.stop)) {
       throw new Error(`Conflicting programmes at ${key}`);
     }
     unique.set(key, programme);
   }
   return [...unique.values()].sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
+}
+
+/**
+ * 核心修正逻辑：
+ * 按天和频道组织节目，如果某天的第一个节目开始时间不是 00:00:00，
+ * 则查找该频道前一天的最后一个节目，并创建一个从 00:00:00 到当天第一个节目开始前1秒的填充节目。
+ */
+function fillMissingStartOfDay(allProgrammes, channelsMap) {
+  // 1. 按频道分组
+  const byChannel = new Map();
+  for (const p of allProgrammes) {
+    if (!byChannel.has(p.channel)) byChannel.set(p.channel, []);
+    byChannel.get(p.channel).push(p);
+  }
+
+  const filledProgrammes = [];
+
+  for (const [channelId, progs] of byChannel.entries()) {
+    // 按时间排序
+    progs.sort((a, b) => a.start - b.start);
+
+    // 按天分组处理
+    const byDay = new Map();
+    for (const p of progs) {
+      const day = dateKey(p.start);
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(p);
+    }
+
+    // 获取该频道所有日期的排序列表，以便查找“前一天”
+    const sortedDays = Array.from(byDay.keys()).sort();
+
+    for (let i = 0; i < sortedDays.length; i++) {
+      const currentDay = sortedDays[i];
+      const dayProgs = byDay.get(currentDay);
+      
+      // 找到当天的午夜时间点 (UTC秒)
+      const dayMidnight = windowFor(currentDay, 0, 0).start;
+      
+      // 检查当天第一个节目是否从 00:00:00 开始
+      const firstProg = dayProgs[0];
+      const startsAtMidnight = firstProg.start === dayMidnight;
+
+      if (!startsAtMidnight) {
+        // 需要填充
+        let fillerTitle = "未知节目";
+        
+        // 尝试查找前一天的最后一个节目
+        if (i > 0) {
+          const prevDay = sortedDays[i - 1];
+          const prevDayProgs = byDay.get(prevDay);
+          // 前一天最后一个节目
+          const lastPrevProg = prevDayProgs[prevDayProgs.length - 1];
+          if (lastPrevProg) {
+            fillerTitle = `${lastPrevProg.title} (续)`;
+          }
+        }
+
+        // 创建填充节目
+        // 开始时间: 当天 00:00:00
+        // 结束时间: 当天第一个节目开始时间 - 1秒
+        const fillerStart = dayMidnight;
+        const fillerStop = firstProg.start - 1;
+
+        // 只有当填充时长大于0时才添加
+        if (fillerStop > fillerStart) {
+          filledProgrammes.push({
+            channel: channelId,
+            title: fillerTitle,
+            start: fillerStart,
+            stop: fillerStop,
+            is_filler: true // 标记，可选
+          });
+        }
+      }
+
+      // 添加当天的所有原始节目
+      filledProgrammes.push(...dayProgs);
+    }
+  }
+
+  return filledProgrammes;
 }
 
 export async function collect(source, {
@@ -68,13 +173,19 @@ export async function collect(source, {
   const range = windowFor(today, pastDays, futureDays);
   const channels = await source.channels();
   if (channels.length < minChannels) throw new Error(`Only ${channels.length} channels; expected at least ${minChannels}`);
+  
+  // 构建频道映射，方便后续查找
+  const channelsMap = new Map(channels.map(c => [c.id, c]));
+
   const first = dateKey(range.start), last = dateKey(range.stop - 1);
   // Include the preceding day's final programme if it crosses into our window.
   const firstFetch = dateKey(range.start - DAY);
   const tasks = channels.flatMap(channel => channel.dates
     .filter(date => date >= firstFetch && date <= last).map(date => ({ channel, date })));
+  
   const empty = [], failures = [], programmes = [], discarded = [];
   let next = 0, completed = 0;
+  
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
     while (next < tasks.length) {
       const { channel, date } = tasks[next++];
@@ -96,17 +207,25 @@ export async function collect(source, {
       if (delayMs) await sleep(delayMs);
     }
   }));
+  
   // Never publish a partial scrape after network/schema failures.
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
-  const result = deduplicate(programmes);
+  
+  // 应用补全逻辑
+  const rawResult = deduplicate(programmes);
+  const result = deduplicate(fillMissingStartOfDay(rawResult, channelsMap));
+
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
+  
   const todayChannels = new Set(result.filter(p => dateKey(p.start) === today).map(p => p.channel));
   const coverage = todayChannels.size / channels.length;
   if (coverage < minTodayCoverage) {
     throw new Error(`Today's channel coverage ${(coverage * 100).toFixed(1)}% is below ${minTodayCoverage * 100}%`);
   }
+  
   const counts = new Map();
   for (const p of result) counts.set(p.channel, (counts.get(p.channel) ?? 0) + 1);
+  
   const manifest = {
     generatedAt: new Date().toISOString(), referenceDate: today, source: HOME,
     format: 'XMLTV', channelSchemaVersion: 2, encoding: 'UTF-8', timezone: 'Asia/Shanghai', logoFormat: 'PNG',
