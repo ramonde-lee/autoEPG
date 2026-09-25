@@ -155,7 +155,7 @@ export async function publishDirectory(api, directory, commit, {
     const variants = (m.variants ?? []).map(v => `[${v.file}](${base}/download/${entry.date}/${v.file})：${v.from} 至 ${v.to}（${v.bytes} 字节）`).join('\n\n');
     const body = `央视频节目单 · ${entry.date}（北京时间）\n\n` +
       `更新：${index.generatedAt}；频道：${m.channelCount}；节目：${m.programmeCount}；XML：${m.xmlBytes} 字节。\n\n` +
-      `epg.xml 为当日数据；如含 epg2.xml、epg3.xml，则分别从版本日期起覆盖两天、三天。跨午夜节目保留真实起止时间。每日北京时间 00:00 刷新相同日期版本。\n\n${variants}\n\n` +
+      `epg.xml 为当日数据；如含 epg2.xml、epg3.xml，则分别从版本日期起覆盖两天、三天。跨午夜节目自动在次日增加第一条节目单无缝衔接。每日北京时间 00:00 刷新相同日期版本。\n\n${variants}\n\n` +
       `[本日 XML](${base}/download/${entry.date}/epg.xml) · [当天固定订阅](${base}/latest/download/epg.xml)`;
     prepared.push({ date: entry.date, today, commit, files, body });
   }
