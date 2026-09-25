@@ -12,11 +12,9 @@ const OFFSET = 8 * 3600;
 export function dateKey(seconds) {
   return new Date((seconds + OFFSET) * 1000).toISOString().slice(0, 10);
 }
-
 export function xmltvTime(seconds) {
   return new Date((seconds + OFFSET) * 1000).toISOString().slice(0, 19).replace(/[-:T]/g, '') + ' +0800';
 }
-
 export function windowFor(today, pastDays, futureDays) {
   const midnight = Date.parse(`${today}T00:00:00+08:00`) / 1000;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || !Number.isFinite(midnight) || dateKey(midnight) !== today) {
@@ -24,8 +22,8 @@ export function windowFor(today, pastDays, futureDays) {
   }
   return { start: midnight - pastDays * DAY, stop: midnight + (futureDays + 1) * DAY };
 }
-
 export function cleanText(value) {
+  // XML 1.0 permits tabs, CR/LF, and these Unicode ranges only.
   return String(value).replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '').trim();
 }
 
@@ -38,6 +36,8 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
         start < midnight || start >= midnight + 2 * DAY || stop < start || stop - start > DAY) {
       throw new Error(`Invalid programme ${channel.pid}/${date}/${row.programId ?? '?'}: title or timestamps`);
     }
+    // Schedule edits can leave empty intervals beside their valid replacements.
+    // They contain no airtime; omit them without guessing an end or changing other rows.
     if (stop === start) {
       onDiscard({ channel: channel.id, date, programId: row.programId ?? null,
         title, start, stop, reason: 'zero-duration' });
@@ -47,13 +47,32 @@ export function normalize(rows, channel, date, { onDiscard = () => {} } = {}) {
   });
 }
 
+/**
+ * 合并 channel/start/title/stop 完全一致的重复行。
+ * 只合并完全一致的重复项；title 或 stop 不同的行原样保留，
+ * 交由 deduplicate() 做严格冲突检测。
+ */
+export function mergeSameSlot(programmes) {
+  const merged = [];
+  for (const programme of programmes) {
+    const duplicate = merged.find(
+      p => p.channel === programme.channel &&
+           p.start === programme.start &&
+           p.title === programme.title &&
+           p.stop === programme.stop
+    );
+    if (!duplicate) merged.push(programme);
+  }
+  return merged;
+}
+
 export function deduplicate(programmes) {
   const unique = new Map();
   for (const programme of programmes) {
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
     if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
-      throw new Error(`Conflicting programmes at ${key}: [${previous.title}] vs [${programme.title}]`);
+      throw new Error(`Conflicting programmes at ${key}`);
     }
     unique.set(key, programme);
   }
@@ -61,57 +80,82 @@ export function deduplicate(programmes) {
 }
 
 /**
- * 补全每天起始时间的缺失部分
- * ⚠️ 安全约束：
- * 1. 仅对单日粒度数据生效
- * 2. 若 00:00:00 已被任何节目覆盖（含精确等于00:00:00开始的节目），跳过
- * 3. 若无前一天真实节目可引用，不生成填充
- * 4. 填充前二次校验目标时间戳无冲突
+ * 仅用于输出渲染：如果某频道当天第一个节目开始时间不是 00:00:00（UTC+8），
+ * 则读取前一天最后一个节目，在当天第一个节目之前补一条：
+ *   start = 当天 00:00:00
+ *   stop  = 当天第一个节目.start - 1
+ *   title = 前一天最后一个节目的标题
+ *
+ * 参数 allProgrammes 必须是全集（至少包含当天与前一天），
+ * 内部再切出当天和前一天，避免因提前过滤而找不到前一天节目。
+ *
+ * 不修改入参，返回补齐后的新数组。
+ * 如果补出来的节目与已有节目在 channel/start 上冲突，保留已有节目，丢弃补出来的那条。
  */
-function fillMissingStartOfDay(programmes) {
-  if (!programmes || programmes.length === 0) return [];
+export function padDayStart(allProgrammes, channels, date) {
+  const midnight = windowFor(date, 0, 0).start;
+  const dayEnd = midnight + DAY;
+  const previousDayStart = midnight - DAY;
 
-  // 仅单日数据处理
-  const days = new Set(programmes.map(p => dateKey(p.start)));
-  if (days.size > 1) return programmes;
+  const known = new Set(channels.map(c => c.id));
 
-  const byChannel = new Map();
-  for (const p of programmes) {
-    if (!byChannel.has(p.channel)) byChannel.set(p.channel, []);
-    byChannel.get(p.channel).push(p);
+  // 当天节目（含跨天进入当天的）
+  const todayProgrammes = allProgrammes.filter(
+    p => known.has(p.channel) && p.start < dayEnd && p.stop > midnight
+  );
+  // 前一天节目（含跨天进入当天的）
+  const previousProgrammes = allProgrammes.filter(
+    p => known.has(p.channel) && p.start < midnight && p.stop > previousDayStart
+  );
+
+  const byChannelToday = new Map();
+  for (const p of todayProgrammes) {
+    if (!byChannelToday.has(p.channel)) byChannelToday.set(p.channel, []);
+    byChannelToday.get(p.channel).push(p);
   }
 
-  const result = [];
-
-  for (const [channelId, progs] of byChannel.entries()) {
-    progs.sort((a, b) => a.start - b.start);
-
-    const dayStr = dateKey(progs[0].start);
-    const dayMidnight = windowFor(dayStr, 0, 0).start;
-
-    // ✅ 严格检查：是否有任何节目覆盖了 dayMidnight 时刻
-    // 包括：start == midnight 的节目，或 start < midnight < stop 的跨天节目
-    const coversMidnight = progs.some(p => 
-      p.start === dayMidnight || (p.start < dayMidnight && p.stop > dayMidnight)
-    );
-
-    // ✅ 二次校验：确保没有节目恰好在 dayMidnight 开始
-    const hasProgAtMidnight = progs.some(p => p.start === dayMidnight);
-
-    if (!coversMidnight && !hasProgAtMidnight && progs.length > 0) {
-      const firstProg = progs[0];
-      
-      // 仅当首个节目确实在午夜之后开始
-      if (firstProg.start > dayMidnight) {
-        // 单日数据集无法获取前一天节目，根据"不发明节目"原则，此处不填充
-        // （此逻辑块保留用于未来支持多日上下文时的扩展）
-      }
-    }
-
-    result.push(...progs);
+  const byChannelPrevious = new Map();
+  for (const p of previousProgrammes) {
+    if (!byChannelPrevious.has(p.channel)) byChannelPrevious.set(p.channel, []);
+    byChannelPrevious.get(p.channel).push(p);
   }
 
-  return result.sort((a, b) => a.channel.localeCompare(b.channel) || a.start - b.start);
+  const existing = new Set(todayProgrammes.map(p => `${p.channel}/${p.start}`));
+  const padded = [...todayProgrammes];
+
+  for (const [channel, list] of byChannelToday) {
+    const sorted = [...list].sort((a, b) => a.start - b.start);
+
+    if (sorted.some(p => p.start === midnight)) continue;
+    if (existing.has(`${channel}/${midnight}`)) continue;
+
+    const todayFirst = sorted.find(p => p.start >= midnight && p.start < dayEnd);
+    if (!todayFirst) continue;
+    if (todayFirst.start === midnight) continue;
+
+    const previousList = byChannelPrevious.get(channel) ?? [];
+    const previousLast = previousList
+      .filter(p => p.stop <= todayFirst.start)
+      .sort((a, b) => b.stop - a.stop)[0];
+
+    if (!previousLast) continue;
+
+    const stop = todayFirst.start - 1;
+    if (stop < midnight) continue;
+
+    const key = `${channel}/${midnight}`;
+    if (existing.has(key)) continue;
+
+    padded.push({
+      channel,
+      title: previousLast.title,
+      start: midnight,
+      stop,
+    });
+    existing.add(key);
+  }
+
+  return padded;
 }
 
 export async function collect(source, {
@@ -122,34 +166,26 @@ export async function collect(source, {
   const range = windowFor(today, pastDays, futureDays);
   const channels = await source.channels();
   if (channels.length < minChannels) throw new Error(`Only ${channels.length} channels; expected at least ${minChannels}`);
-  
   const first = dateKey(range.start), last = dateKey(range.stop - 1);
+  // Include the preceding day's final programme if it crosses into our window.
   const firstFetch = dateKey(range.start - DAY);
-  
-  const tasks = [];
-  for (const channel of channels) {
-    const dates = (channel.dates ?? []).filter(date => date >= firstFetch && date <= last);
-    for (const date of dates) tasks.push({ channel, date });
-  }
-
+  const tasks = channels.flatMap(channel => channel.dates
+    .filter(date => date >= firstFetch && date <= last).map(date => ({ channel, date })));
   const empty = [], failures = [], programmes = [], discarded = [];
   let next = 0, completed = 0;
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length || 1) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
     while (next < tasks.length) {
-      const taskIndex = next++;
-      const { channel, date } = tasks[taskIndex];
+      const { channel, date } = tasks[next++];
       try {
         const rows = await source.programmes(channel, date);
         if (!rows.length) empty.push({ channel: channel.id, date });
-        
+        // The extra day is only a lookback for programmes crossing midnight.
+        // Malformed old rows that ended before our window cannot affect this EPG.
         const relevant = date < first ? rows.filter(row => row.et > range.start) : rows;
         const parsed = normalize(relevant, channel, date, { onDiscard: p => discarded.push(p) });
-        
-        if (parsed.length && date >= first && date <= last && !parsed.some(p => dateKey(p.start) === date)) {
-           throw new Error('Response contains no programmes starting on the requested date');
+        if (parsed.length && !parsed.some(p => dateKey(p.start) === date)) {
+          throw new Error('Response contains no programmes starting on the requested date');
         }
-        
         programmes.push(...parsed.filter(p => p.start < range.stop && p.stop > range.start));
       } catch (error) {
         failures.push(`${channel.name}/${date}: ${error.message}`);
@@ -158,24 +194,20 @@ export async function collect(source, {
       if (delayMs) await sleep(delayMs);
     }
   }));
-  
+  // Never publish a partial scrape after network/schema failures.
   if (failures.length) throw new Error(`${failures.length} schedule request(s) failed:\n${failures.join('\n')}`);
-  
-  const rawResult = deduplicate(programmes);
-  const filledResult = fillMissingStartOfDay(rawResult);
-  const result = deduplicate(filledResult);
 
+  // 先合并完全一致的重复行，再交给 deduplicate() 做严格冲突检测
+  const merged = mergeSameSlot(programmes);
+  const result = deduplicate(merged);
   if (!result.length) throw new Error('No programmes; refusing to publish an empty EPG');
-  
   const todayChannels = new Set(result.filter(p => dateKey(p.start) === today).map(p => p.channel));
   const coverage = todayChannels.size / channels.length;
   if (coverage < minTodayCoverage) {
     throw new Error(`Today's channel coverage ${(coverage * 100).toFixed(1)}% is below ${minTodayCoverage * 100}%`);
   }
-  
   const counts = new Map();
   for (const p of result) counts.set(p.channel, (counts.get(p.channel) ?? 0) + 1);
-  
   const manifest = {
     generatedAt: new Date().toISOString(), referenceDate: today, source: HOME,
     format: 'XMLTV', channelSchemaVersion: 2, encoding: 'UTF-8', timezone: 'Asia/Shanghai', logoFormat: 'PNG',
@@ -228,7 +260,11 @@ export async function writeArtifacts(directory, dataset) {
     const date = dateKey(day);
     const programmes = dataset.programmes.filter(p => p.start < day + DAY && p.stop > day);
     if (!programmes.length) continue;
-    const xml = Buffer.from(renderXml(dataset.channels, programmes));
+
+    // 仅渲染时补头，使用全集以便能看到前一天最后一个节目
+    const padded = padDayStart(dataset.programmes, dataset.channels, date);
+    const xml = Buffer.from(renderXml(dataset.channels, padded));
+
     const manifest = {
       ...dataset.manifest, date, requestedDates: { from: date, to: date }, programmeCount: programmes.length,
       channelsWithProgrammes: new Set(programmes.map(p => p.channel)).size,
@@ -243,10 +279,12 @@ export async function writeArtifacts(directory, dataset) {
     if (date === dataset.manifest.referenceDate) {
       for (const days of [2, 3]) {
         const end = day + days * DAY;
+        // A short, explicitly requested local window must not masquerade as 2/3 days.
         if (end > stop) continue;
         const combined = dataset.programmes.filter(p => p.start < end && p.stop > day);
+        const paddedCombined = padDayStart(dataset.programmes, dataset.channels, date);
         const name = `epg${days}.xml`;
-        files[name] = Buffer.from(renderXml(dataset.channels, combined));
+        files[name] = Buffer.from(renderXml(dataset.channels, paddedCombined));
         manifest.variants.push({ file: name, days, from: date, to: dateKey(end - 1),
           programmeCount: combined.length, bytes: files[name].length });
       }
@@ -261,7 +299,8 @@ export async function writeArtifacts(directory, dataset) {
       for (const variant of variants) {
         const name = groupFile(variant.file, group.id);
         const subset = dataset.programmes.filter(p => ids.has(p.channel) && p.start < day + variant.days * DAY && p.stop > day);
-        files[name] = Buffer.from(renderXml(members, subset, { sourceName: group.name }));
+        const paddedSubset = padDayStart(dataset.programmes, members, date);
+        files[name] = Buffer.from(renderXml(members, paddedSubset, { sourceName: group.name }));
         const feed = { file: name, days: variant.days, from: variant.from, to: variant.to,
           programmeCount: subset.length, bytes: files[name].length, groupId: group.id };
         feeds.push(feed);
