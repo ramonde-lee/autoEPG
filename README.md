@@ -8,6 +8,11 @@
 
 **[https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz)**
 
+**最后更新时间：
+<!-- UPDATE_TIME_START -->
+
+<!-- UPDATE_TIME_END -->
+
 当天 Latest 同时提供三个固定入口，按需要选择：
 
 | 文件 | 日期范围 | 订阅链接 |
