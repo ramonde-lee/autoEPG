@@ -8,7 +8,7 @@
 
 **[https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz)**
 
-**最后更新时间：
+**最后更新时间：**
 <!-- UPDATE_TIME_START -->
 
 <!-- UPDATE_TIME_END -->
