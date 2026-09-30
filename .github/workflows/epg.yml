@@ -83,7 +83,7 @@ jobs:
           text = p.read_text(encoding="utf-8")
           new = re.sub(
               r"(<!-- UPDATE_TIME_START -->)(.*?)(<!-- UPDATE_TIME_END -->)",
-              lambda m: f"{m.group(1)}\n**最后更新时间：{now}**\n{m.group(3)}",
+              lambda m: f"{m.group(1)}\n**最后更新完成时间：{now}**\n{m.group(3)}",
               text,
               flags=re.S,
           )
