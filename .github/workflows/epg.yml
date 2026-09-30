@@ -13,7 +13,7 @@ on:
         default: false
   schedule:
     # UTC 16:00 -> next day 00:00 in Beijing. GitHub may delay scheduled runs.
-    - cron: '15 0,12 * * *'
+    - cron: '15 0,6,12 * * *'
       timezone: 'Asia/Shanghai'
 
 permissions:
@@ -47,7 +47,8 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          persist-credentials: false
+          persist-credentials: true
+          fetch-depth: 0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
@@ -60,3 +61,49 @@ jobs:
           REBUILD_RELEASES: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_releases }}
         run: |
           node src/publish.js dist | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Update last-update markdown
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.rebuild_releases) }}
+        env:
+          TZ: Asia/Shanghai
+        run: |
+          set -euo pipefail
+          NOW="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+          FILE="README.md"
+
+          if [ ! -f "$FILE" ]; then
+            echo "File $FILE not found, skip."
+            exit 0
+          fi
+
+          python3 - "$FILE" "$NOW" <<'PY'
+          import re, sys, pathlib
+          path, now = sys.argv[1], sys.argv[2]
+          p = pathlib.Path(path)
+          text = p.read_text(encoding="utf-8")
+          new = re.sub(
+              r"(<!-- UPDATE_TIME_START -->)(.*?)(<!-- UPDATE_TIME_END -->)",
+              lambda m: f"{m.group(1)}\n最后更新时间：{now}\n{m.group(3)}",
+              text,
+              flags=re.S,
+          )
+          p.write_text(new, encoding="utf-8")
+          print(f"Updated {path} -> {now}")
+          PY
+
+      - name: Commit and push
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.rebuild_releases) }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- LAST_UPDATE.md; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git add LAST_UPDATE.md
+          git commit -m "chore: update EPG last-update time [skip ci]"
+          git pull --rebase origin main
+          git push
