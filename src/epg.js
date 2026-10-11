@@ -54,7 +54,12 @@ export function deduplicate(programmes) {
     const key = `${programme.channel}/${programme.start}`;
     const previous = unique.get(key);
     if (previous && (previous.title !== programme.title || previous.stop !== programme.stop)) {
-      throw new Error(`Conflicting programmes at ${key}`);
+      // Upstream occasionally returns two different programmes for the same
+      // channel/start. Keep the first and warn; do not fail the whole scrape.
+      console.warn(`Conflicting programmes at ${key}: ` +
+        `keeping [${previous.title}] ${previous.start}-${previous.stop}, ` +
+        `dropping [${programme.title}] ${programme.start}-${programme.stop}`);
+      continue;
     }
     unique.set(key, programme);
   }
