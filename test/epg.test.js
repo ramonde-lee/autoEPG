@@ -15,10 +15,10 @@ const channel = { id: 'ysp.123', pid: '123', name: 'CCTV1', logo: 'https://examp
 const options = { today, pastDays: 0, futureDays: 0, minChannels: 1, delayMs: 0 };
 const source = (rows = [row()]) => ({ channels: async () => [channel], programmes: async () => rows });
 
-// Ten-day date list whose 7th entry (index 6) is `today`, matching pastDays=6.
+// Ten consecutive Beijing days ending three days after `today`.
 const tenDayDates = (() => {
-  const base = Date.parse(`${today}T00:00:00+08:00`) - 6 * 86_400_000;
-  return Array.from({ length: 10 }, (_, i) => new Date(base + i * 86_400_000).toISOString().slice(0, 10));
+  const base = Date.parse(`${today}T00:00:00+08:00`) / 1000 - 6 * 86_400;
+  return Array.from({ length: 10 }, (_, i) => dateKey(base + i * 86_400));
 })();
 
 test('Beijing day and XMLTV timestamps do not depend on runner timezone', () => {
@@ -58,7 +58,7 @@ test('real Hunan and Guizhou schedule edits discard only zero-duration rows and 
     const data = await collect({
       channels: async () => cases.map(c => ({ ...channel, id: c.pid, pid: c.pid, dates: [c.date] })),
       programmes: async c => cases.find(f => f.pid === c.pid).rows,
-    }, { today: refDate, pastDays: 0, futureDays: 0, minChannels: 1, minTodayCoverage: 0.5, delayMs: 0 });
+    }, { today: refDate, pastDays: 1, futureDays: 0, minChannels: 1, minTodayCoverage: 0.5, delayMs: 0 });
 
     assert.equal(data.programmes.length, 4);
     assert.equal(data.manifest.discardedProgrammes.length, 2);
@@ -193,7 +193,8 @@ test('writes the reference day only and verifies checksums', async () => {
       assert.equal(createHash('sha256').update(await readFile(join(folder, name))).digest('hex'), digest);
     }
     assert.equal(JSON.parse(await readFile(join(folder, 'manifest.json'))).date, today);
-    assert.deepEqual(await readdir(directory), [today]);
+    // Top level holds only the reference-day folder and releases.json.
+    assert.deepEqual((await readdir(directory)).sort(), [today, 'releases.json'].sort());
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
