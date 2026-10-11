@@ -215,7 +215,9 @@ test('today exports the six epg variants with precise ranges and no duplicate pr
     }, { today, pastDays: 6, futureDays: 3, minChannels: 1, delayMs: 0 });
     await writeArtifacts(directory, data);
     const folder = join(directory, today);
-    const parser = new XMLParser({ ignoreAttributes: false, isArray: name => name === 'programme' });
+    // Both `channel` and `programme` must always be arrays, even for single-child files.
+    const parser = new XMLParser({ ignoreAttributes: false,
+      isArray: name => name === 'programme' || name === 'channel' });
 
     const expected = [
       { file: 'epg.xml',            days: 4,  channels: 2, first: today,          last: tenDayDates[9] },
