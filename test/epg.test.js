@@ -44,10 +44,14 @@ test('rejects invalid, stale, and millisecond timestamps, and empty titles', () 
   }
 });
 
-test('deduplicates identical rows but rejects conflicting schedules', () => {
+test('deduplicates identical rows and keeps the first on conflict', () => {
   const [p] = normalize([row()], channel, today);
   assert.equal(deduplicate([p, p]).length, 1);
-  assert.throws(() => deduplicate([p, { ...p, title: 'Different' }]), /Conflicting/);
+  // Conflicting entries no longer throw; the first one wins.
+  const result = deduplicate([p, { ...p, title: 'Different' }]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].title, p.title);
+  assert.equal(result[0].stop, p.stop);
 });
 
 test('real Hunan and Guizhou schedule edits discard only zero-duration rows and report them by date', async () => {
@@ -98,7 +102,12 @@ test('zero-duration rows never manufacture airtime or count toward coverage', as
 });
 
 test('discarding an empty interval does not hide conflicting positive-duration programmes', async () => {
-  await assert.rejects(collect(source([row('A'), { ...row(), et: row().st }, row('B')]), options), /Conflicting/);
+  // Two positive-duration rows share the same channel/start with different titles.
+  // A zero-duration row between them must not change the outcome: the first wins.
+  const data = await collect(source([row('A'), { ...row(), et: row().st }, row('B')]), options);
+  const kept = data.programmes.filter(p => p.start === row().st);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].title, 'A');
 });
 
 test('XML is valid, escapes text/attributes, removes illegal characters, and orders channels first', () => {
