@@ -270,7 +270,15 @@ export async function writeArtifacts(directory, dataset,
   for (const out of OUTPUTS) {
     const winStart = referenceStart - out.past * DAY;
     const winEnd = referenceStart + (out.future + 1) * DAY;
-    if (winStart < rangeStart || winEnd > rangeStop) continue;
+    // Every output must fit inside the scraped range. Silent skipping would
+    // ship an incomplete release; fail loudly instead.
+    if (winStart < rangeStart || winEnd > rangeStop) {
+      throw new Error(
+        `Output ${out.file} needs [${dateKey(winStart)}, ${dateKey(winEnd)}) ` +
+        `but scraped range is [${from}, ${to}]; ` +
+        `regenerate with pastDays >= ${out.past}, futureDays >= ${out.future}`
+      );
+    }
 
     let members = dataset.channels;
     let memberIds = null;
