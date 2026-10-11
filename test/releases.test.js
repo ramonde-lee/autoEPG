@@ -164,10 +164,11 @@ test('publishes and replaces the ten-day and per-category subscription assets', 
   await upsertRelease(api, { ...options, files: variants });
   assert.deepEqual(liveAssets(api.releases[0]).map(a => a.name).sort(), expectedNames);
 
-  await upsertRelease(api, { ...options, files: { ...variants, 'epg-10d.xml': Buffer.from('updated ten days') } });
+  const updated = Buffer.from('updated ten days');
+  await upsertRelease(api, { ...options, files: { ...variants, 'epg-10d.xml': updated } });
   const live = liveAssets(api.releases[0]);
   assert.deepEqual(live.map(a => a.name).sort(), expectedNames);
-  assert.equal(live.find(a => a.name === 'epg-10d.xml').size, 15);
+  assert.equal(live.find(a => a.name === 'epg-10d.xml').size, updated.length);
   // Every staging/backup asset must be cleaned up after a successful refresh.
   assert(api.releases[0].assets.every(a => !a.name.startsWith('__autoepg_')));
 });
