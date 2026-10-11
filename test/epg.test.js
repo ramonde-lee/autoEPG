@@ -54,7 +54,8 @@ test('real Hunan and Guizhou schedule edits discard only zero-duration rows and 
   const cases = JSON.parse(await readFile(new URL('./fixtures/zero-duration-programmes.json', import.meta.url)));
   const directory = await mkdtemp(join(tmpdir(), 'autoepg-zero-duration-'));
   try {
-    const refDate = cases[0].date;
+    // `today` must be the latest fixture date so pastDays: 1 covers both.
+    const refDate = cases.map(c => c.date).sort().at(-1);
     const data = await collect({
       channels: async () => cases.map(c => ({ ...channel, id: c.pid, pid: c.pid, dates: [c.date] })),
       programmes: async c => cases.find(f => f.pid === c.pid).rows,
@@ -203,30 +204,42 @@ test('writes the reference day only and verifies checksums', async () => {
 test('today exports the six epg variants with precise ranges and no duplicate programmes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'autoepg-variants-test-'));
   try {
+    const cctv = { id: 'ysp.123', pid: '123', name: 'CCTV1', groupId: 'cctv',
+      logo: 'https://example.com/a.png', dates: tenDayDates };
+    const weishi = { id: 'ysp.456', pid: '456', name: '湖南卫视', groupId: 'weishi',
+      logo: 'https://example.com/b.png', dates: tenDayDates };
     const data = await collect({
-      channels: async () => [{ ...channel, dates: tenDayDates }],
-      programmes: async (c, date) => [row(date, `${date}T23:00:00+08:00`, `${date}T23:30:00+08:00`)],
+      channels: async () => [cctv, weishi],
+      programmes: async (c, date) => [row(`${c.name} ${date}`,
+        `${date}T23:00:00+08:00`, `${date}T23:30:00+08:00`)],
     }, { today, pastDays: 6, futureDays: 3, minChannels: 1, delayMs: 0 });
     await writeArtifacts(directory, data);
     const folder = join(directory, today);
     const parser = new XMLParser({ ignoreAttributes: false, isArray: name => name === 'programme' });
 
     const expected = [
-      { file: 'epg.xml',            days: 4,  first: today,          last: tenDayDates[9] },
-      { file: 'epg-10d.xml',        days: 10, first: tenDayDates[0], last: tenDayDates[9] },
-      { file: 'epg-cctv.xml',       days: 4,  first: today,          last: tenDayDates[9] },
-      { file: 'epg-cctv-10d.xml',   days: 10, first: tenDayDates[0], last: tenDayDates[9] },
-      { file: 'epg-weishi.xml',     days: 4,  first: today,          last: tenDayDates[9] },
-      { file: 'epg-weishi-10d.xml', days: 10, first: tenDayDates[0], last: tenDayDates[9] },
+      { file: 'epg.xml',            days: 4,  channels: 2, first: today,          last: tenDayDates[9] },
+      { file: 'epg-10d.xml',        days: 10, channels: 2, first: tenDayDates[0], last: tenDayDates[9] },
+      { file: 'epg-cctv.xml',       days: 4,  channels: 1, first: today,          last: tenDayDates[9] },
+      { file: 'epg-cctv-10d.xml',   days: 10, channels: 1, first: tenDayDates[0], last: tenDayDates[9] },
+      { file: 'epg-weishi.xml',     days: 4,  channels: 1, first: today,          last: tenDayDates[9] },
+      { file: 'epg-weishi-10d.xml', days: 10, channels: 1, first: tenDayDates[0], last: tenDayDates[9] },
     ];
 
     for (const spec of expected) {
       const xml = await readFile(join(folder, spec.file), 'utf8');
       assert.equal(XMLValidator.validate(xml), true, `${spec.file} must be valid XML`);
-      const programmes = parser.parse(xml).tv.programme ?? [];
-      assert.equal(programmes.length, spec.days, `${spec.file} must contain ${spec.days} programmes`);
+      const tv = parser.parse(xml).tv;
+      const channels = tv.channel;
+      const programmes = tv.programme ?? [];
+      assert.equal(channels.length, spec.channels, `${spec.file} channel count`);
+      assert.equal(programmes.length, spec.channels * spec.days, `${spec.file} programme count`);
+
+      // Titles encode "Channel YYYY-MM-DD"; the set of dates must match the window.
       const titles = programmes.map(p => typeof p.title === 'string' ? p.title : p.title['#text']);
-      assert.deepEqual(titles, tenDayDates.slice(tenDayDates.indexOf(spec.first), tenDayDates.indexOf(spec.last) + 1));
+      const datesInFile = [...new Set(titles.map(t => t.split(' ').at(-1)))].sort();
+      const windowDates = tenDayDates.slice(tenDayDates.indexOf(spec.first), tenDayDates.indexOf(spec.last) + 1);
+      assert.deepEqual(datesInFile, windowDates, `${spec.file} window`);
     }
 
     const manifest = JSON.parse(await readFile(join(folder, 'manifest.json')));
