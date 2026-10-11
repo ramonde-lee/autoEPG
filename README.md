@@ -4,7 +4,7 @@
 
 **跨午夜节目自动在次日增加第一条节目单无缝衔接。**
 
-## 当天订阅
+## 当天+未来3天订阅
 
 **[https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz)**
 
@@ -16,42 +16,17 @@
 
 | 文件 | 日期范围 | 订阅链接 |
 | --- | --- | --- |
-| `epg.xml.gz` | 今天 | [单日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz) |
-| `epg2.xml.gz` | 今天、明天 | [两日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg2.xml.gz) |
-| `epg3.xml.gz` | 今天、明天、后天 | [三日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg3.xml.gz) |
+| `epg.xml.gz` | 今天+未来3天 | [单日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz) |
+| `epg-10d.xml.gz` | 过去6天+今天+未来3天 | [两日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg-10d.xml.gz) |
 
-三份文件都是独立、同步提供未压缩的标准 XMLTV（地址去掉后缀".gz"就行），播放器需要支持 HTTPS 重定向，每日一起刷新。未来日期尚未公布的节目不会凭空补齐，实际范围和节目数见 `manifest.json` 的 `variants`。
-
-## 日期版本
-
-版本号和 tag 均为 `YYYY-MM-DD`，每个版本内的文件都叫 `epg.xml.gz`。例如北京时间 2026-09-09：
-
-| 版本 | 发布状态 | 文件内容 |
-| --- | --- | --- |
-| `2026-09-08` | 历史正式 Release | 9 月 8 日节目 |
-| `2026-09-09` | 正式 Release，**Latest** | 9 月 9 日节目 |
-| `2026-09-10` | **Pre-release** | 9 月 10 日节目 |
-| `2026-09-11` | **Pre-release** | 9 月 11 日节目 |
-
-指定日期的固定下载格式：
-
-```text
-https://github.com/ramonde-lee/autoEPG/releases/download/2026-09-09/epg.xml.gz
-```
-
-到 9 月 10 日刷新时，`2026-09-10` 转为正式版并设为 Latest，9 月 9 日保留为历史版。源站调整节目后，刷新会**替换同日期版本的附件**，不会再创建按运行次数编号的版本。
-
-版本从早到晚依次发布，并使用日期注解标签（标签时间为节目日期的北京时间零点），使 Release 页面按日期从新到旧排列；Latest 独立指定为当天，未来版本仍为 Pre-release。标签日期表示节目单日期，实际抓取时间见 `manifest.json`。
-
-每个日期版本附带 `channels.json`（频道映射）、`manifest.json`（节目数、文件大小、更新时间、数据覆盖情况）和 `SHA256SUMS`（校验和）。每个 XML 独立包含所需频道定义；与该日期相交的跨午夜节目保留真实起止时间，因此边界节目可能出现在相邻两天的文件中。
+文件都是独立、同步提供未压缩的标准 XMLTV（地址去掉后缀".gz"就行），播放器需要支持 HTTPS 重定向，每日一起刷新。未来日期尚未公布的节目不会凭空补齐，实际范围和节目数见 `manifest.json` 的 `variants`。
 
 ## 更新规则
 
-[Update EPG 工作流](https://github.com/ramonde-lee/autoEPG/actions/workflows/epg.yml) 每天北京时间 **00:00** 运行一次，对应 UTC `0 16 * * *`。GitHub 排队可能延迟，尤其是整点，文件不保证零点整完成发布。
+[Update EPG 工作流](https://github.com/ramonde-lee/autoEPG/actions/workflows/epg.yml) 每天北京时间 **0/6/12点** 各运行一次。GitHub 排队可能延迟，尤其是整点，文件不保证零点整完成发布。
 
-- 默认刷新过去 3 天、今天和未来 3 天，以源站实际公布的日期为准。范围之外的已发布历史版本保留。
+- 默认今天+未来3天，以源站实际公布的日期为准。由于EPG的时效性，不保留历史版本。
 - 动态发现频道及节目日期；额外读取起始日前一天，补全跨午夜节目。
-- 未来日期只发布为 Pre-release，不会抢占 Latest。
 - 支持 Actions → Update EPG → Run workflow 手动刷新；推送 `main` 后也会测试并刷新，PR 仅测试。
 - 每个请求最多尝试 3 次，最多 4 个并发。至少发现 50 个频道且今天频道覆盖率达到 90% 才发布。请求失败、异常时间、有效节目冲突和空导出都会阻止发布；合法空节目单记录在清单中。
 - 源站调整节目时可能遗留开始、结束时间相等的零时长记录。仅跳过这些没有播出区间的记录，保留有效节目原始时间；日志会提示数量，`manifest.json` 的 `discardedProgrammes` 记录频道、日期、源节目 ID、标题、时间和原因。清理后的数据仍需通过覆盖率及冲突检查。
@@ -81,15 +56,6 @@ https://your-stream-provider.example/cctv1.m3u8
 主文件的 `source-info-name="央视频"`，频道按“央视频道”“卫视频道”排列。XMLTV 没有标准的频道分组字段，因此不添加自定义 XML 字段；应用可读取 [channels.json](https://github.com/ramonde-lee/autoEPG/releases/latest/download/channels.json) 的 `groupId`、`group`，或 [groups.json](https://github.com/ramonde-lee/autoEPG/releases/latest/download/groups.json) 的频道 ID 列表和订阅文件索引。
 
 只需一类频道时，可订阅独立的标准 XMLTV 文件；分组文件的 `source-info-name` 为对应分组名称：
-
-| 分组 | 今天 | 今天、明天 | 今天、明天、后天 |
-| --- | --- | --- | --- |
-| 央视频道（`cctv`） | [epg-cctv.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg-cctv.xml.gz) | [epg2-cctv.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg2-cctv.xml.gz) | [epg3-cctv.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg3-cctv.xml.gz) |
-| 卫视频道（`weishi`） | [epg-weishi.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg-weishi.xml.gz) | [epg2-weishi.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg2-weishi.xml.gz) | [epg3-weishi.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg3-weishi.xml.gz) |
-
-分组跟随央视频源站分类（包括源站归入卫视频道的 CETV1）。日期版本也提供两个单日分组文件。分组和完整文件使用相同的频道 ID、别名及 PNG 台标。
-
-台标链接统一为真正的 PNG。CCTV 的 34 个频道使用项目内 [assets/logos](assets/logos/README.md) 的银白渐变透明台标，通过本仓库 Raw 地址提供；每次生成校验本地文件签名和 SHA-256。CGTN、卫视频道继续使用源站 PNG，移除 WebP 转换参数，并通过无登录、无 Referer 的请求验证 PNG 签名。图片不内嵌到 XML，避免增加体积。XMLTV 字段、频道关联和跨日语义见 [接入说明](docs/xmltv.md)。
 
 ## 免费额度
 
