@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { decode, extractChannels } from '../src/source.js';
 import { channelProfile } from '../src/channels.js';
-import { collect, writeArtifacts } from '../src/epg.js';
+import { collect, writeArtifacts, dateKey } from '../src/epg.js';
 
 const channels = extractChannels(decode('PageResponse', await readFile(new URL('./fixtures/page.pb', import.meta.url))));
 
@@ -27,10 +27,9 @@ test('canonical IDs preserve distinct source channels and legacy mappings', () =
 test('group feeds partition full XML, retain aliases, and cover each requested duration', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'autoepg-groups-'));
   try {
-    // Ten consecutive days so both the 4-day and 10-day outputs fit.
-    const base = Date.parse('2026-09-03T00:00:00+08:00');
-    const dates = Array.from({ length: 10 }, (_, i) =>
-      new Date(base + i * 86_400_000).toISOString().slice(0, 10));
+    // Ten consecutive Beijing days so both the 4-day and 10-day outputs fit.
+    const base = Date.parse('2026-09-03T00:00:00+08:00') / 1000;
+    const dates = Array.from({ length: 10 }, (_, i) => dateKey(base + i * 86_400));
     const referenceDate = dates[6];
     const selected = channels.filter(c => ['cctv3', 'hunanweishi'].includes(c.id))
       .map(c => ({ ...c, dates }));
@@ -45,7 +44,7 @@ test('group feeds partition full XML, retain aliases, and cover each requested d
     const folder = join(directory, referenceDate);
     const groups = JSON.parse(await readFile(join(folder, 'groups.json')));
     assert.equal(groups.channelSchemaVersion, 2);
-    assert.deepEqual(groups.groups.map(g => g.name), ['央视频道', '卫视频道']);
+    assert.deepEqual(groups.groups.map(g => g.name), ['央视频道', '卫视']);
 
     const parser = new XMLParser({ ignoreAttributes: false,
       isArray: name => ['channel', 'programme', 'display-name'].includes(name) });
