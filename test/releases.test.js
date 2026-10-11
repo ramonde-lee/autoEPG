@@ -30,6 +30,9 @@ class FakeGitHub {
     if (method === 'GET' && path.startsWith('/releases/tags/')) {
       return structuredClone(this.releases.find(r => r.tag_name === path.split('/').at(-1)) ?? null);
     }
+    if (method === 'GET' && path.startsWith('/releases?')) {
+      return structuredClone(this.releases);
+    }
     if (method === 'POST' && path === '/releases') {
       const release = { ...body, id: this.nextId++, assets: [] };
       this.releases.push(release);
@@ -59,6 +62,10 @@ class FakeGitHub {
     const releasePath = path.match(/^\/releases\/(\d+)$/);
     if (releasePath) {
       const release = this.releases.find(r => r.id === Number(releasePath[1]));
+      if (method === 'DELETE') {
+        this.releases = this.releases.filter(r => r.id !== Number(releasePath[1]));
+        return null;
+      }
       if (method === 'PATCH') {
         Object.assign(release, body);
         if (body.make_latest === 'true') this.latest = release.tag_name;
@@ -73,12 +80,13 @@ class FakeGitHub {
 const files = suffix => Object.fromEntries(ASSETS.map(name => [name, Buffer.from(name + suffix)]));
 const options = { date: '2026-09-09', today: '2026-09-09', commit: 'abc', body: 'EPG', files: files('v1') };
 
-test('date versions distinguish historical, current and future releases across years', () => {
+test('date versions mark current as Latest and future as non-prerelease', () => {
   assert.equal(releasePolicy('2025-12-31', '2026-01-01').make_latest, 'false');
   assert.deepEqual(releasePolicy('2026-01-01', '2026-01-01'), {
     tag_name: '2026-01-01', name: '2026-01-01', prerelease: false, make_latest: 'true',
   });
-  assert.equal(releasePolicy('2026-01-02', '2026-01-01').prerelease, true);
+  assert.equal(releasePolicy('2026-01-02', '2026-01-01').prerelease, false);
+  assert.equal(releasePolicy('2026-01-02', '2026-01-01').make_latest, 'false');
   assert.throws(() => releasePolicy('../../file', options.today));
 });
 
@@ -88,11 +96,12 @@ test('creates a draft, uploads files, publishes today and keeps future releases 
   await upsertRelease(api, { ...options, date: '2026-09-10' });
   assert.equal(api.latest, options.today);
   assert.equal(api.releases[0].draft, false);
-  assert.equal(api.releases[1].prerelease, true);
+  assert.equal(api.releases[1].prerelease, false);
+  assert.equal(api.releases[1].make_latest, 'false');
   assert.deepEqual(api.releases[0].assets.map(a => a.name), ASSETS);
 });
 
-test('refreshes an existing date in place and promotes its prerelease when the date arrives', async () => {
+test('refreshes an existing date in place and promotes it to Latest', async () => {
   const api = new FakeGitHub();
   await upsertRelease(api, { ...options, today: '2026-09-08' });
   const id = api.releases[0].id;
@@ -133,40 +142,57 @@ test('rejects immutable releases before replacing files', async () => {
   assert.equal(api.uploadCount, 4);
 });
 
-test('publishes and replaces the two-day and three-day subscription assets', async () => {
+test('publishes and replaces the ten-day and per-category subscription assets', async () => {
   const api = new FakeGitHub();
-  const variants = { ...files('v1'), 'epg2.xml': Buffer.from('two days'), 'epg3.xml': Buffer.from('three days') };
+  const variants = {
+    ...files('v1'),
+    'epg-10d.xml': Buffer.from('ten days'),
+    'epg-cctv.xml': Buffer.from('cctv'),
+    'epg-cctv-10d.xml': Buffer.from('cctv ten'),
+    'epg-weishi.xml': Buffer.from('weishi'),
+    'epg-weishi-10d.xml': Buffer.from('weishi ten'),
+  };
   await upsertRelease(api, { ...options, files: variants });
-  assert(api.releases[0].assets.some(a => a.name === 'epg2.xml'));
-  assert(api.releases[0].assets.some(a => a.name === 'epg3.xml'));
-  await upsertRelease(api, { ...options, files: { ...variants, 'epg3.xml': Buffer.from('updated three days') } });
-  assert.equal(api.releases[0].assets.length, 6);
-  assert.equal(api.releases[0].assets.find(a => a.name === 'epg3.xml').size, 18);
+  for (const name of ['epg-10d.xml', 'epg-cctv.xml', 'epg-cctv-10d.xml', 'epg-weishi.xml', 'epg-weishi-10d.xml']) {
+    assert(api.releases[0].assets.some(a => a.name === name), `expected ${name}`);
+  }
+  await upsertRelease(api, { ...options, files: { ...variants, 'epg-10d.xml': Buffer.from('updated ten days') } });
+  assert.equal(api.releases[0].assets.length, Object.keys(variants).length);
+  assert.equal(api.releases[0].assets.find(a => a.name === 'epg-10d.xml').size, 15);
 });
 
-test('publishes in calendar order with dated annotated tags and refuses stale/corrupt input', async () => {
+test('publishes a single current-day Release with a dated annotated tag and refuses stale/corrupt input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'autoepg-release-test-'));
   try {
-    const dates = ['2026-09-08', '2026-09-09', '2026-09-10'];
+    // Ten-day scrape; the reference date is the 7th day.
+    const base = Date.parse(`${options.today}T00:00:00+08:00`) - 6 * 86_400_000;
+    const dates = Array.from({ length: 10 }, (_, i) =>
+      new Date(base + i * 86_400_000).toISOString().slice(0, 10));
     const dataset = await collect({
       channels: async () => [{ id: 'ysp.1', pid: '1', name: 'Test', dates }],
       programmes: async (channel, date) => [{ name: date,
         st: Date.parse(`${date}T10:00:00+08:00`) / 1000, et: Date.parse(`${date}T11:00:00+08:00`) / 1000 }],
-    }, { today: options.today, pastDays: 1, futureDays: 1, minChannels: 1, delayMs: 0 });
+    }, { today: options.today, pastDays: 6, futureDays: 3, minChannels: 1, delayMs: 0 });
     await writeArtifacts(dir, dataset);
+
     const api = new FakeGitHub();
     const config = { currentDate: () => options.today };
-    assert.equal(await publishDirectory(api, dir, 'abc', config), 3);
-    assert.deepEqual(api.published, ['2026-09-08', '2026-09-09', '2026-09-10']);
-    for (const date of dates) {
-      const tag = api.tagObjects.get(api.tags.get(date).object.sha);
-      assert.equal(tag.tagger.date, `${date}T00:00:00+08:00`);
-    }
+    assert.equal(await publishDirectory(api, dir, 'abc', config), 1);
+    assert.deepEqual(api.published, [options.today]);
+    const tag = api.tagObjects.get(api.tags.get(options.today).object.sha);
+    assert.equal(tag.tagger.date, `${options.today}T00:00:00+08:00`);
     assert.equal(api.latest, options.today);
+
+    // No stale releases: publishDirectory prunes everything but the current day.
+    assert.deepEqual(api.releases.map(r => r.tag_name), [options.today]);
+
+    // Stale scrape date is refused.
     await assert.rejects(publishDirectory(api, dir, 'abc', { currentDate: () => '2026-09-10' }), /Scrape date/);
+
+    // Corrupt file is refused after checksum validation.
     await writeFile(join(dir, options.today, 'epg.xml'), 'corrupt');
     await assert.rejects(publishDirectory(api, dir, 'abc', { ...config, rebuild: true }), /Checksum/);
-    assert.equal(api.published.length, 3);
+    assert.equal(api.published.length, 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
