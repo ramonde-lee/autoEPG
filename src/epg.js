@@ -211,7 +211,7 @@ const OUTPUTS = [
 
 function sourceNameForGroup(groupId) {
   if (groupId === 'cctv') return '央视频道';
-  if (groupId === 'weishi') return '卫视';
+  if (groupId === 'weishi') return '卫视频道';
   return '央视频';
 }
 
