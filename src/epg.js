@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { HOME } from './source.js';
-import { GROUPS, groupedChannels, groupFile } from './channels.js';
+import { GROUPS, groupedChannels } from './channels.js';
 
 const DAY = 86_400;
 const OFFSET = 8 * 3600;
@@ -107,7 +107,7 @@ export function padDayStart(programmes, allProgrammes, day, { onPad = () => {} }
 }
 
 export async function collect(source, {
-  today = dateKey(Date.now() / 1000), pastDays = 3, futureDays = 3,
+  today = dateKey(Date.now() / 1000), pastDays = 6, futureDays = 3,
   concurrency = 4, minChannels = 50, minTodayCoverage = 0.9,
   delayMs = 150, onProgress = () => {},
 } = {}) {
@@ -196,35 +196,67 @@ export function renderXml(channels, programmes, { sourceName = '央视频' } = {
   return doc.end({ prettyPrint: true }) + '\n';
 }
 
+// Output configuration: category x window. Only the reference day emits files,
+// and only the reference day is published as a Release.
+//   - group: null => all channels
+//   - window length = past + future + 1 days
+const OUTPUTS = [
+  { file: 'epg.xml',            past: 0, future: 3, group: null },
+  { file: 'epg-10d.xml',        past: 6, future: 3, group: null },
+  { file: 'epg-cctv.xml',       past: 0, future: 3, group: 'cctv' },
+  { file: 'epg-cctv-10d.xml',   past: 6, future: 3, group: 'cctv' },
+  { file: 'epg-weishi.xml',     past: 0, future: 3, group: 'weishi' },
+  { file: 'epg-weishi-10d.xml', past: 6, future: 3, group: 'weishi' },
+];
+
+function sourceNameForGroup(groupId) {
+  if (groupId === 'cctv') return '央视频道';
+  if (groupId === 'weishi') return '卫视';
+  return '央视频';
+}
+
+function buildGroupsJson(channels) {
+  const groups = [];
+  for (const g of GROUPS) {
+    const members = channels.filter(c => c.groupId === g.id);
+    if (!members.length) continue;
+    groups.push({
+      id: g.id,
+      name: g.name,
+      channelIds: members.map(c => c.id),
+      feeds: [
+        { file: `epg-${g.id}.xml`, days: 4 },
+        { file: `epg-${g.id}-10d.xml`, days: 10 },
+      ],
+    });
+  }
+  return { source: '央视频', channelSchemaVersion: 2, groups };
+}
+
 // `padDayStart` and `gzip` are opt-in: tests and callers that need byte-for-byte
 // parity with the unpadded, plain-XML layout pass nothing, while cli.js enables
 // both for production.
 export async function writeArtifacts(directory, dataset,
   { padDayStart: shouldPad = false, gzip = false } = {}) {
-  const releases = [];
   const { from, to } = dataset.manifest.requestedDates;
-  const start = windowFor(from, 0, 0).start;
-  const stop = windowFor(to, 0, 0).stop;
+  const rangeStart = windowFor(from, 0, 0).start;
+  const rangeStop = windowFor(to, 0, 0).stop;
+  const referenceStart = windowFor(dataset.manifest.referenceDate, 0, 0).start;
+  const date = dataset.manifest.referenceDate;
 
-  // When enabled, pad every day in the requested range once, up front. This
-  // keeps 1/2/3-day variants and group feeds consistent: they all filter the
-  // same padded set, and each day/channel gets exactly one filler programme.
-  const paddedProgrammes = [];
+  // ---- 1. Optional global padding ----
   const padded = [];
   if (shouldPad) {
-    for (let day = start; day < stop; day += DAY) {
+    for (let day = rangeStart; day < rangeStop; day += DAY) {
       const dayEnd = day + DAY;
       const daySlice = dataset.programmes.filter(p => p.start >= day && p.start < dayEnd);
       if (!daySlice.length) continue;
-      const withPad = padDayStart(daySlice, dataset.programmes, day, { onPad: p => paddedProgrammes.push(p) });
-      for (const p of withPad) if (p.padded) padded.push(p);
+      padDayStart(daySlice, dataset.programmes, day, { onPad: p => padded.push(p) });
     }
   }
   const allProgrammes = padded.length ? [...dataset.programmes, ...padded] : dataset.programmes;
 
-  // Build a window's programmes from the (optionally padded) set.
-  // `windowStart` must be a midnight epoch second; `days` is the window length.
-  // `channelFilter`, when provided, restricts to a set of channel ids.
+  // ---- 2. Window builder ----
   const buildWindow = (windowStart, days, channelFilter = null) => {
     const end = windowStart + days * DAY;
     return allProgrammes.filter(p =>
@@ -232,79 +264,94 @@ export async function writeArtifacts(directory, dataset,
       (!channelFilter || channelFilter.has(p.channel)));
   };
 
-  for (let day = start; day < stop; day += DAY) {
-    const date = dateKey(day);
-    const programmes = buildWindow(day, 1);
-    if (!programmes.length) continue;
-    const xml = Buffer.from(renderXml(dataset.channels, programmes));
-    const manifest = {
-      ...dataset.manifest, date, requestedDates: { from: date, to: date }, programmeCount: programmes.length,
-      channelsWithProgrammes: new Set(programmes.map(p => p.channel)).size,
-      earliestStart: new Date(programmes.reduce((min, p) => Math.min(min, p.start), Infinity) * 1000).toISOString(),
-      latestStop: new Date(programmes.reduce((max, p) => Math.max(max, p.stop), -Infinity) * 1000).toISOString(),
-      emptySchedules: dataset.manifest.emptySchedules.filter(s => s.date === date),
-      discardedProgrammes: (dataset.manifest.discardedProgrammes ?? []).filter(p => dateKey(p.start) === date),
-      paddedProgrammes: paddedProgrammes.filter(p => p.date === date),
-      xmlBytes: xml.length,
-    };
-    const files = { 'epg.xml': xml };
-    manifest.variants = [{ file: 'epg.xml', days: 1, from: date, to: date, programmeCount: programmes.length, bytes: xml.length }];
-    if (date === dataset.manifest.referenceDate) {
-      for (const days of [2, 3]) {
-        const end = day + days * DAY;
-        // A short, explicitly requested local window must not masquerade as 2/3 days.
-        if (end > stop) continue;
-        const combined = buildWindow(day, days);
-        const name = `epg${days}.xml`;
-        files[name] = Buffer.from(renderXml(dataset.channels, combined));
-        manifest.variants.push({ file: name, days, from: date, to: dateKey(end - 1),
-          programmeCount: combined.length, bytes: files[name].length });
-      }
-    }
-    const variants = [...manifest.variants];
-    const groups = [];
-    for (const group of GROUPS) {
-      const members = dataset.channels.filter(c => c.groupId === group.id);
+  // ---- 3. Build every output for the reference day ----
+  const files = {};
+  const variants = [];
+  for (const out of OUTPUTS) {
+    const winStart = referenceStart - out.past * DAY;
+    const winEnd = referenceStart + (out.future + 1) * DAY;
+    if (winStart < rangeStart || winEnd > rangeStop) continue;
+
+    let members = dataset.channels;
+    let memberIds = null;
+    if (out.group) {
+      members = dataset.channels.filter(c => c.groupId === out.group);
       if (!members.length) continue;
-      const ids = new Set(members.map(c => c.id));
-      const feeds = [];
-      for (const variant of variants) {
-        const name = groupFile(variant.file, group.id);
-        const variantStart = windowFor(variant.from, 0, 0).start;
-        const subset = buildWindow(variantStart, variant.days, ids);
-        files[name] = Buffer.from(renderXml(members, subset, { sourceName: group.name }));
-        const feed = { file: name, days: variant.days, from: variant.from, to: variant.to,
-          programmeCount: subset.length, bytes: files[name].length, groupId: group.id };
-        feeds.push(feed);
-        manifest.variants.push(feed);
-      }
-      groups.push({ id: group.id, name: group.name, channelIds: members.map(c => c.id), feeds });
+      memberIds = new Set(members.map(c => c.id));
     }
-    // Mirror every XML asset as a gzipped sibling so clients can fetch a
-    // smaller payload without re-encoding. gzipSync is deterministic for a
-    // given input, so SHA256SUMS stays reproducible. Opt-in for parity with
-    // callers that expect only plain XML on disk.
-    if (gzip) {
-      for (const name of Object.keys(files)) {
-        if (name.endsWith('.xml')) files[`${name}.gz`] = gzipSync(files[name]);
-      }
-    }
-    files['channels.json'] = Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n');
-    files['groups.json'] = Buffer.from(JSON.stringify({ source: '央视频', channelSchemaVersion: 2, groups }, null, 2) + '\n');
-    files['manifest.json'] = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
-    files['SHA256SUMS'] = Buffer.from(Object.entries(files).map(([name, data]) =>
-      `${createHash('sha256').update(data).digest('hex')}  ${name}\n`).join(''));
-    const folder = join(directory, date);
-    await mkdir(folder, { recursive: true });
-    for (const [name, data] of Object.entries(files)) {
-      const target = join(folder, name);
-      await writeFile(`${target}.tmp`, data);
-      await rename(`${target}.tmp`, target);
-    }
-    releases.push({ date, programmeCount: programmes.length, xmlBytes: xml.length, assets: Object.keys(files) });
+
+    const days = out.past + out.future + 1;
+    const subset = buildWindow(winStart, days, memberIds);
+    if (!subset.length) continue;
+
+    files[out.file] = Buffer.from(renderXml(members, subset, {
+      sourceName: sourceNameForGroup(out.group),
+    }));
+    variants.push({
+      file: out.file,
+      group: out.group ?? 'all',
+      days,
+      from: dateKey(winStart),
+      to: dateKey(winEnd - 1),
+      programmeCount: subset.length,
+      bytes: files[out.file].length,
+    });
   }
+
+  if (!files['epg.xml']) throw new Error('Reference-day epg.xml was not produced');
+
+  // ---- 4. Manifest for the single Release ----
+  const primary = buildWindow(referenceStart, 1);
+  const manifest = {
+    ...dataset.manifest,
+    date,
+    requestedDates: { from: date, to: dateKey(referenceStart + 3 * DAY) },
+    programmeCount: primary.length,
+    channelsWithProgrammes: new Set(primary.map(p => p.channel)).size,
+    earliestStart: new Date(primary.reduce((m, p) => Math.min(m, p.start), Infinity) * 1000).toISOString(),
+    latestStop: new Date(primary.reduce((m, p) => Math.max(m, p.stop), -Infinity) * 1000).toISOString(),
+    emptySchedules: dataset.manifest.emptySchedules.filter(s => s.date === date),
+    discardedProgrammes: (dataset.manifest.discardedProgrammes ?? []).filter(p => dateKey(p.start) === date),
+    paddedProgrammes: padded.filter(p => dateKey(p.start) === date),
+    variants,
+    xmlBytes: files['epg.xml'].length,
+  };
+
+  // ---- 5. Optional gzip siblings ----
+  if (gzip) {
+    for (const name of Object.keys(files)) {
+      if (name.endsWith('.xml')) files[`${name}.gz`] = gzipSync(files[name]);
+    }
+  }
+
+  // ---- 6. Sidecar JSON + checksums ----
+  files['channels.json'] = Buffer.from(JSON.stringify(dataset.channels, null, 2) + '\n');
+  files['groups.json'] = Buffer.from(JSON.stringify(buildGroupsJson(dataset.channels), null, 2) + '\n');
+  files['manifest.json'] = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
+  files['SHA256SUMS'] = Buffer.from(Object.entries(files)
+    .map(([name, data]) => `${createHash('sha256').update(data).digest('hex')}  ${name}\n`)
+    .join(''));
+
+  // ---- 7. Atomic writes ----
+  const folder = join(directory, date);
+  await mkdir(folder, { recursive: true });
+  for (const [name, data] of Object.entries(files)) {
+    const target = join(folder, name);
+    await writeFile(`${target}.tmp`, data);
+    await rename(`${target}.tmp`, target);
+  }
+
+  // ---- 8. Top-level index ----
   await mkdir(directory, { recursive: true });
-  const index = { ...dataset.manifest, releases };
+  const index = {
+    ...dataset.manifest,
+    releases: [{
+      date,
+      programmeCount: primary.length,
+      xmlBytes: files['epg.xml'].length,
+      assets: Object.keys(files),
+    }],
+  };
   await writeFile(join(directory, 'releases.json.tmp'), JSON.stringify(index, null, 2) + '\n');
   await rename(join(directory, 'releases.json.tmp'), join(directory, 'releases.json'));
   return index;
