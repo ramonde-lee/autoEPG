@@ -55,7 +55,6 @@ export async function ensureDateTag(api, date, commit) {
   windowFor(date, 0, 0);
   const ref = await api.call('GET', `/git/ref/tags/${date}`, undefined, { allow404: true });
   if (ref) return;
-  // The tag date is the schedule date, independent of the generator commit date.
   const tag = await api.call('POST', '/git/tags', {
     tag: date, message: `EPG schedule for ${date} (Asia/Shanghai)`, object: commit, type: 'commit',
     tagger: { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com',
@@ -64,14 +63,12 @@ export async function ensureDateTag(api, date, commit) {
   try {
     await api.call('POST', '/git/refs', { ref: `refs/tags/${date}`, sha: tag.sha });
   } catch (error) {
-    // A concurrent run may have created the same tag; treat that as success.
     if (!/already exists|422/.test(error.message)) throw error;
   }
 }
 
 export async function deleteAllReleases(api) {
   const releases = [];
-  // Snapshot all pages before deleting, so pagination cannot skip shifted entries.
   for (let page = 1; ; page++) {
     const batch = await api.call('GET', `/releases?per_page=100&page=${page}`);
     releases.push(...batch);
@@ -82,15 +79,12 @@ export async function deleteAllReleases(api) {
     await api.call('DELETE', `/releases/${release.id}`);
     console.log(`Deleted Release ${release.tag_name}`);
   }
-  // Recreate only tags attached to the deleted releases; leave unrelated tags alone.
   for (const tag of new Set(releases.map(r => r.tag_name))) {
     await api.call('DELETE', `/git/refs/tags/${encodeURIComponent(tag)}`, undefined, { allow404: true });
   }
   return releases.length;
 }
 
-// Delete every Release whose tag is not `keepDate`, along with its tag.
-// Enforces "single Release, current day only" on every run.
 async function deleteOtherReleases(api, keepDate) {
   const releases = [];
   for (let page = 1; ; page++) {
@@ -118,7 +112,6 @@ export async function upsertRelease(api, { date, today, commit, body, files }) {
   if (!release) release = await api.call('POST', '/releases', {
     ...policy, target_commitish: commit, body, draft: true, make_latest: 'false',
   });
-  // Stage every new file before changing public names. Failed uploads leave old files intact.
   const nonce = randomUUID();
   const staged = [];
   for (const name of assetNames(Object.keys(files))) {
@@ -139,7 +132,6 @@ export async function upsertRelease(api, { date, today, commit, body, files }) {
       await api.call('PATCH', `/releases/assets/${item.asset.id}`, { name: item.name });
     }
   } catch (error) {
-    // Best-effort rollback for a failed rename; original bytes have not been deleted.
     for (const item of started.reverse()) {
       try {
         await api.call('PATCH', `/releases/assets/${item.asset.id}`, { name: item.pendingName });
@@ -149,7 +141,6 @@ export async function upsertRelease(api, { date, today, commit, body, files }) {
     throw error;
   }
   await api.call('PATCH', `/releases/${release.id}`, { ...policy, body, draft: false });
-  // Clean only our staging/backup assets. Leave user-added attachments untouched.
   const current = await api.call('GET', `/releases/${release.id}`);
   for (const asset of current.assets ?? []) {
     if (asset.name.startsWith('__autoepg_')) {
@@ -167,7 +158,6 @@ export async function publishDirectory(api, directory, commit, {
   if (index.referenceDate !== today) throw new Error('Scrape date is not today; regenerate before publishing');
   if (!index.releases.some(r => r.date === today)) throw new Error('Current-day EPG is missing');
 
-  // Only the reference day is published.
   const entry = index.releases.find(r => r.date === today);
   const names = assetNames(entry.assets ?? ASSETS);
   const files = Object.fromEntries(await Promise.all(names.map(async name =>
@@ -191,9 +181,7 @@ export async function publishDirectory(api, directory, commit, {
 
   if (currentDate() !== today) throw new Error('Beijing midnight crossed before publishing; regenerate schedules');
 
-  // Destructive rebuild is explicitly opt-in and happens only after full validation.
   if (rebuild) await deleteAllReleases(api);
-  // Enforce "single Release, current day only": drop any other releases/tags.
   await deleteOtherReleases(api, today);
 
   const policy = await upsertRelease(api, { date: entry.date, today, commit, files, body });
