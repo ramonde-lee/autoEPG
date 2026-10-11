@@ -44,7 +44,7 @@ test('group feeds partition full XML, retain aliases, and cover each requested d
     const folder = join(directory, referenceDate);
     const groups = JSON.parse(await readFile(join(folder, 'groups.json')));
     assert.equal(groups.channelSchemaVersion, 2);
-    assert.deepEqual(groups.groups.map(g => g.name), ['央视频道', '卫视']);
+    assert.deepEqual(groups.groups.map(g => g.name), ['央视频道', '卫视频道']);
 
     const parser = new XMLParser({ ignoreAttributes: false,
       isArray: name => ['channel', 'programme', 'display-name'].includes(name) });
