@@ -16,8 +16,8 @@
 
 | 文件 | 日期范围 | 订阅链接 |
 | --- | --- | --- |
-| `epg.xml.gz` | 今天+未来3天 | [单日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz) |
-| `epg-10d.xml.gz` | 过去6天+今天+未来3天 | [两日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg-10d.xml.gz) |
+| `epg.xml.gz` | 今天+未来3天 | [四日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz) |
+| `epg-10d.xml.gz` | 过去6天+今天+未来3天 | [十日](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg-10d.xml.gz) |
 
 文件都是独立、同步提供未压缩的标准 XMLTV（地址去掉后缀".gz"就行），播放器需要支持 HTTPS 重定向，每日一起刷新。未来日期尚未公布的节目不会凭空补齐，实际范围和节目数见 `manifest.json` 的 `variants`。
 
