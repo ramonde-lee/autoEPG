@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ASSETS, releasePolicy, upsertRelease, publishDirectory, deleteAllReleases } from '../src/releases.js';
-import { collect, writeArtifacts } from '../src/epg.js';
+import { collect, writeArtifacts, dateKey } from '../src/epg.js';
 
 class FakeGitHub {
   repository = 'example/epg';
@@ -28,7 +28,13 @@ class FakeGitHub {
       return body;
     }
     if (method === 'GET' && path.startsWith('/releases/tags/')) {
-      return structuredClone(this.releases.find(r => r.tag_name === path.split('/').at(-1)) ?? null);
+      const tag = path.split('/').at(-1);
+      const release = this.releases.find(r => r.tag_name === tag);
+      return release ? structuredClone(release) : null;
+    }
+    if (method === 'GET' && /^\/releases\/\d+$/.test(path)) {
+      const release = this.releases.find(r => r.id === Number(path.split('/').at(-1)));
+      return release ? structuredClone(release) : null;
     }
     if (method === 'GET' && path.startsWith('/releases?')) {
       return structuredClone(this.releases);
@@ -79,6 +85,7 @@ class FakeGitHub {
 
 const files = suffix => Object.fromEntries(ASSETS.map(name => [name, Buffer.from(name + suffix)]));
 const options = { date: '2026-09-09', today: '2026-09-09', commit: 'abc', body: 'EPG', files: files('v1') };
+const liveAssets = release => release.assets.filter(a => !a.name.startsWith('__autoepg_'));
 
 test('date versions mark current as Latest and future as non-prerelease', () => {
   assert.equal(releasePolicy('2025-12-31', '2026-01-01').make_latest, 'false');
@@ -98,40 +105,40 @@ test('creates a draft, uploads files, publishes today and keeps future releases 
   assert.equal(api.releases[0].draft, false);
   assert.equal(api.releases[1].prerelease, false);
   assert.equal(api.releases[1].make_latest, 'false');
-  assert.deepEqual(api.releases[0].assets.map(a => a.name), ASSETS);
+  assert.deepEqual(liveAssets(api.releases[0]).map(a => a.name), ASSETS);
 });
 
 test('refreshes an existing date in place and promotes it to Latest', async () => {
   const api = new FakeGitHub();
   await upsertRelease(api, { ...options, today: '2026-09-08' });
   const id = api.releases[0].id;
-  const digest = api.releases[0].assets[0].digest;
+  const digest = liveAssets(api.releases[0])[0].digest;
   await upsertRelease(api, { ...options, files: files('updated') });
   assert.equal(api.releases.length, 1);
   assert.equal(api.releases[0].id, id);
   assert.equal(api.releases[0].prerelease, false);
   assert.equal(api.latest, options.today);
-  assert.notEqual(api.releases[0].assets[0].digest, digest);
-  assert.deepEqual(api.releases[0].assets.map(a => a.name), ASSETS);
+  assert.notEqual(liveAssets(api.releases[0])[0].digest, digest);
+  assert.deepEqual(liveAssets(api.releases[0]).map(a => a.name), ASSETS);
 });
 
 test('failed staging upload preserves all previously published file names and contents', async () => {
   const api = new FakeGitHub();
   await upsertRelease(api, options);
-  const original = structuredClone(api.releases[0].assets);
+  const original = structuredClone(liveAssets(api.releases[0]));
   api.failUploadAt = api.uploadCount + 2;
   await assert.rejects(upsertRelease(api, { ...options, files: files('new') }), /upload failed/);
-  assert.deepEqual(api.releases[0].assets.filter(a => !a.name.startsWith('__autoepg_')), original);
+  assert.deepEqual(liveAssets(api.releases[0]), original);
   assert.equal(api.latest, options.today);
 });
 
 test('failed rename rolls back both previously switched files and the current file', async () => {
   const api = new FakeGitHub();
   await upsertRelease(api, options);
-  const original = structuredClone(api.releases[0].assets);
+  const original = structuredClone(liveAssets(api.releases[0]));
   api.failRename = 'channels.json';
   await assert.rejects(upsertRelease(api, { ...options, files: files('new') }), /rename failed/);
-  assert.deepEqual(api.releases[0].assets.filter(a => !a.name.startsWith('__autoepg_')), original);
+  assert.deepEqual(liveAssets(api.releases[0]), original);
 });
 
 test('rejects immutable releases before replacing files', async () => {
@@ -152,22 +159,24 @@ test('publishes and replaces the ten-day and per-category subscription assets', 
     'epg-weishi.xml': Buffer.from('weishi'),
     'epg-weishi-10d.xml': Buffer.from('weishi ten'),
   };
+  const expectedNames = Object.keys(variants).sort();
+
   await upsertRelease(api, { ...options, files: variants });
-  for (const name of ['epg-10d.xml', 'epg-cctv.xml', 'epg-cctv-10d.xml', 'epg-weishi.xml', 'epg-weishi-10d.xml']) {
-    assert(api.releases[0].assets.some(a => a.name === name), `expected ${name}`);
-  }
+  assert.deepEqual(liveAssets(api.releases[0]).map(a => a.name).sort(), expectedNames);
+
   await upsertRelease(api, { ...options, files: { ...variants, 'epg-10d.xml': Buffer.from('updated ten days') } });
-  assert.equal(api.releases[0].assets.length, Object.keys(variants).length);
-  assert.equal(api.releases[0].assets.find(a => a.name === 'epg-10d.xml').size, 15);
+  const live = liveAssets(api.releases[0]);
+  assert.deepEqual(live.map(a => a.name).sort(), expectedNames);
+  assert.equal(live.find(a => a.name === 'epg-10d.xml').size, 15);
+  // Every staging/backup asset must be cleaned up after a successful refresh.
+  assert(api.releases[0].assets.every(a => !a.name.startsWith('__autoepg_')));
 });
 
 test('publishes a single current-day Release with a dated annotated tag and refuses stale/corrupt input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'autoepg-release-test-'));
   try {
-    // Ten-day scrape; the reference date is the 7th day.
-    const base = Date.parse(`${options.today}T00:00:00+08:00`) - 6 * 86_400_000;
-    const dates = Array.from({ length: 10 }, (_, i) =>
-      new Date(base + i * 86_400_000).toISOString().slice(0, 10));
+    const base = Date.parse(`${options.today}T00:00:00+08:00`) / 1000 - 6 * 86_400;
+    const dates = Array.from({ length: 10 }, (_, i) => dateKey(base + i * 86_400));
     const dataset = await collect({
       channels: async () => [{ id: 'ysp.1', pid: '1', name: 'Test', dates }],
       programmes: async (channel, date) => [{ name: date,
