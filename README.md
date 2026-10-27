@@ -9,7 +9,7 @@
 **[https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz](https://github.com/ramonde-lee/autoEPG/releases/latest/download/epg.xml.gz)**
 
 <!-- UPDATE_TIME_START -->
-**最后更新完成时间：2026-10-27 05:04:52 CST**
+**最后更新完成时间：2026-10-27 09:32:42 CST**
 <!-- UPDATE_TIME_END -->
 
 当天 Latest 同时提供两个固定入口，按需要选择：
